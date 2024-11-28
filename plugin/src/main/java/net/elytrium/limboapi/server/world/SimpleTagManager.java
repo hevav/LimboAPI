@@ -17,87 +17,67 @@
 
 package net.elytrium.limboapi.server.world;
 
-import com.google.gson.Gson;
 import com.google.gson.internal.LinkedTreeMap;
 import com.velocitypowered.api.network.ProtocolVersion;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 import net.elytrium.limboapi.LimboAPI;
 import net.elytrium.limboapi.api.material.WorldVersion;
 import net.elytrium.limboapi.protocol.packets.s2c.UpdateTagsPacket;
+import net.elytrium.limboapi.utils.JsonParser;
 
 public class SimpleTagManager {
 
-  private static final Map<String, Integer> FLUIDS = new HashMap<>();
-  private static final Map<WorldVersion, UpdateTagsPacket> VERSION_MAP = new EnumMap<>(WorldVersion.class);
+  private static final Map<String, Integer> FLUIDS;
+  private static final Map<WorldVersion, UpdateTagsPacket> VERSION_MAP;
 
-  @SuppressWarnings("unchecked")
-  public static void init() {
-    Gson gson = new Gson();
-    LinkedTreeMap<String, String> fluids = gson.fromJson(
-        new InputStreamReader(
-            Objects.requireNonNull(LimboAPI.class.getResourceAsStream("/mapping/fluids.json")),
-            StandardCharsets.UTF_8
-        ),
-        LinkedTreeMap.class
-    );
+  static {
+    LinkedTreeMap<String, Number> fluids = JsonParser.parse(LimboAPI.class.getResourceAsStream("/mappings/fluids.json"));
+    FLUIDS = new HashMap<>(fluids.size());
+    fluids.forEach((id, protocolId) -> SimpleTagManager.FLUIDS.put(id, protocolId.intValue()));
 
-    fluids.forEach((id, protocolId) -> FLUIDS.put(id, Integer.valueOf(protocolId)));
-
-    LinkedTreeMap<String, LinkedTreeMap<String, List<String>>> tags = gson.fromJson(
-        new InputStreamReader(
-            Objects.requireNonNull(LimboAPI.class.getResourceAsStream("/mapping/tags.json")),
-            StandardCharsets.UTF_8
-        ),
-        LinkedTreeMap.class
-    );
-
+    LinkedTreeMap<String, LinkedTreeMap<String, List<String>>> tags = JsonParser.parse(LimboAPI.class.getResourceAsStream("/mappings/tags.json"));
+    VERSION_MAP = new EnumMap<>(WorldVersion.class);
     for (WorldVersion version : WorldVersion.values()) {
-      VERSION_MAP.put(version, localGetTagsForVersion(tags, version));
+      SimpleTagManager.VERSION_MAP.put(version, SimpleTagManager.createPacket(tags, version));
     }
   }
 
-  public static UpdateTagsPacket getUpdateTagsPacket(ProtocolVersion version) {
-    return VERSION_MAP.get(WorldVersion.from(version));
-  }
-
   public static UpdateTagsPacket getUpdateTagsPacket(WorldVersion version) {
-    return VERSION_MAP.get(version);
+    return SimpleTagManager.VERSION_MAP.get(version);
   }
 
-  private static UpdateTagsPacket localGetTagsForVersion(LinkedTreeMap<String, LinkedTreeMap<String, List<String>>> defaultTags,
-                                                         WorldVersion version) {
-    Map<String, Map<String, List<Integer>>> tags = new LinkedTreeMap<>();
+  public static UpdateTagsPacket getUpdateTagsPacket(ProtocolVersion version) {
+    return SimpleTagManager.VERSION_MAP.get(WorldVersion.from(version));
+  }
+
+  private static UpdateTagsPacket createPacket(LinkedTreeMap<String, LinkedTreeMap<String, List<String>>> defaultTags, WorldVersion version) {
+    Map<String, Map<String, int[]>> tags = new LinkedTreeMap<>();
     defaultTags.forEach((tagType, defaultTagList) -> {
-      LinkedTreeMap<String, List<Integer>> tagList = new LinkedTreeMap<>();
+      LinkedTreeMap<String, int[]> tagList = new LinkedTreeMap<>();
       switch (tagType) {
         case "minecraft:block": {
-          defaultTagList.forEach((tagName, blockList) ->
-              tagList.put(tagName, blockList.stream()
-                  .map(e -> SimpleBlock.fromModernID(e, Map.of()))
-                  .filter(e -> e.isSupportedOn(version))
-                  .map(e -> (int) e.getBlockID(version))
-                  .collect(Collectors.toList())));
+          defaultTagList.forEach((tagName, blockList) -> tagList.put(tagName, blockList.stream()
+              .map(modernId -> SimpleBlock.fromModernId(modernId, Map.of()))
+              .filter(block -> block.isSupportedOn(version))
+              .mapToInt(block -> block.blockId(version))
+              .toArray()
+          ));
           break;
         }
         case "minecraft:fluid": {
-          defaultTagList.forEach((tagName, fluidList) ->
-              tagList.put(tagName, fluidList.stream().map(FLUIDS::get).collect(Collectors.toList())));
+          defaultTagList.forEach((tagName, fluidList) -> tagList.put(tagName, fluidList.stream().mapToInt(FLUIDS::get).toArray()));
           break;
         }
         case "minecraft:item": {
-          defaultTagList.forEach((tagName, itemList) ->
-              tagList.put(tagName, itemList.stream()
-                  .map(SimpleItem::fromModernID)
-                  .filter(item -> item.isSupportedOn(version))
-                  .map(item -> (int) item.getID(version))
-                  .collect(Collectors.toList())));
+          defaultTagList.forEach((tagName, itemList) -> tagList.put(tagName, itemList.stream()
+              .map(SimpleItem::fromModernId)
+              .filter(item -> item.isSupportedOn(version))
+              .mapToInt(item -> item.itemId(version))
+              .toArray()
+          ));
           break;
         }
         default: {
@@ -106,7 +86,7 @@ public class SimpleTagManager {
               throw new IllegalStateException("The " + tagType + " tag type is not supported yet.");
             }
 
-            tagList.put(tagName, List.of());
+            tagList.put(tagName, new int[0]);
           });
           break;
         }
@@ -114,7 +94,6 @@ public class SimpleTagManager {
 
       tags.put(tagType, tagList);
     });
-
     return new UpdateTagsPacket(tags);
   }
 }

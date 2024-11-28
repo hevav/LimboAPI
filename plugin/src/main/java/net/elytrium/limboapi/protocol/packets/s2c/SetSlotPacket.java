@@ -24,35 +24,34 @@ import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 import net.elytrium.limboapi.api.material.VirtualItem;
 import net.elytrium.limboapi.api.protocol.item.ItemComponentMap;
-import net.elytrium.limboapi.utils.ProtocolTools;
+import net.elytrium.limboapi.protocol.util.LimboProtocolUtils;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-public class SetSlotPacket implements MinecraftPacket {
+public record SetSlotPacket(int containerId, int slot, VirtualItem item, int count, short data, @Nullable CompoundBinaryTag nbt, @Nullable ItemComponentMap map) implements MinecraftPacket {
 
-  private final int windowID;
-  private final int slot;
-  private final VirtualItem item;
-  private final int count;
-  private final int data;
-  @Nullable
-  private final CompoundBinaryTag nbt;
-  @Nullable
-  private final ItemComponentMap map;
-
-  public SetSlotPacket(int windowID, int slot, VirtualItem item, int count, int data,
-      @Nullable CompoundBinaryTag nbt, @Nullable ItemComponentMap map) {
-    this.windowID = windowID;
-    this.slot = slot;
-    this.item = item;
-    this.count = count;
-    this.data = data;
-    this.nbt = nbt;
-    this.map = map;
+  public SetSlotPacket(int containerId, int slot, VirtualItem item, int count) {
+    this(containerId, slot, item, count, (short) 0, null, null);
   }
 
-  public SetSlotPacket() {
-    throw new IllegalStateException();
+  public SetSlotPacket(int containerId, int slot, VirtualItem item, int count, @Nullable CompoundBinaryTag nbt) {
+    this(containerId, slot, item, count, (short) 0, nbt, null);
+  }
+
+  public SetSlotPacket(int containerId, int slot, VirtualItem item, int count, @Nullable ItemComponentMap map) {
+    this(containerId, slot, item, count, (short) 0, null, map);
+  }
+
+  public SetSlotPacket(int containerId, int slot, VirtualItem item, int count, short data) {
+    this(containerId, slot, item, count, data, null, null);
+  }
+
+  public SetSlotPacket(int containerId, int slot, VirtualItem item, int count, short data, @Nullable CompoundBinaryTag nbt) {
+    this(containerId, slot, item, count, data, nbt, null);
+  }
+
+  public SetSlotPacket(int containerId, int slot, VirtualItem item, int count, short data, @Nullable ItemComponentMap map) {
+    this(containerId, slot, item, count, data, null, map);
   }
 
   @Override
@@ -62,89 +61,51 @@ public class SetSlotPacket implements MinecraftPacket {
 
   @Override
   public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
-    if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_20_5) >= 0) {
-      this.encodeModern(buf, direction, protocolVersion);
-    } else {
-      this.encodeLegacy(buf, direction, protocolVersion);
-    }
-  }
+    LimboProtocolUtils.writeContainerId(buf, protocolVersion, this.containerId);
 
-  public void encodeModern(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
-    ProtocolTools.writeContainerId(buf, protocolVersion, this.windowID);
-    ProtocolUtils.writeVarInt(buf, 0);
-    buf.writeShort(this.slot);
-
-    int id = this.item.getID(protocolVersion);
-    if (id == 0) {
-      ProtocolUtils.writeVarInt(buf, 0);
-    } else {
-      ProtocolUtils.writeVarInt(buf, this.count);
-      ProtocolUtils.writeVarInt(buf, id);
-
-      if (this.map != null) {
-        this.map.write(protocolVersion, buf);
-      } else {
-        ProtocolUtils.writeVarInt(buf, 0);
-        ProtocolUtils.writeVarInt(buf, 0);
-      }
-    }
-  }
-
-  public void encodeLegacy(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
-    buf.writeByte(this.windowID);
-
-    if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_17_1) >= 0) {
-      ProtocolUtils.writeVarInt(buf, 0); // State ID.
+    if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_17_1)) {
+      ProtocolUtils.writeVarInt(buf, 0); // State id
     }
 
     buf.writeShort(this.slot);
-    int id = this.item.getID(protocolVersion);
-    boolean present = id > 0;
 
-    if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_13_2) >= 0) {
-      buf.writeBoolean(present);
-    }
-
-    if (!present && protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_13_2) < 0) {
-      buf.writeShort(-1);
-    }
-
-    if (present) {
-      if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_13_2) < 0) {
-        buf.writeShort(id);
-      } else {
+    int id;
+    if (this.count > 0 && (id = this.item.itemId(protocolVersion)) > 0) {
+      if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_20_5)) {
+        ProtocolUtils.writeVarInt(buf, this.count);
         ProtocolUtils.writeVarInt(buf, id);
-      }
-      buf.writeByte(this.count);
-      if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_13) < 0) {
-        buf.writeShort(this.data);
-      }
-
-      if (this.nbt == null) {
-        if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0) {
-          buf.writeShort(-1);
+        if (this.map == null) {
+          ProtocolUtils.writeVarInt(buf, 0); // Added
+          ProtocolUtils.writeVarInt(buf, 0); // Removed
         } else {
-          buf.writeByte(0);
+          this.map.write(buf, protocolVersion);
         }
       } else {
-        ProtocolUtils.writeBinaryTag(buf, protocolVersion, this.nbt);
+        if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_13_2)) {
+          buf.writeBoolean(true);
+          ProtocolUtils.writeVarInt(buf, id);
+        } else {
+          buf.writeShort(id);
+        }
+
+        buf.writeByte(this.count);
+        if (protocolVersion.noGreaterThan(ProtocolVersion.MINECRAFT_1_12_2)) {
+          buf.writeShort(this.data);
+        }
+
+        LimboProtocolUtils.writeBinaryTag(buf, protocolVersion, this.nbt);
       }
+    } else if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_20_5)) {
+      ProtocolUtils.writeVarInt(buf, 0);
+    } else if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_13_2)) {
+      buf.writeBoolean(false);
+    } else {
+      buf.writeShort(-1);
     }
   }
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
-    return true;
-  }
-
-  @Override
-  public String toString() {
-    return "SetSlot{"
-        + "windowID=" + this.windowID
-        + ", slot=" + this.slot
-        + ", count=" + this.count
-        + ", data=" + this.data
-        + ", nbt=" + this.nbt
-        + ")";
+    throw new IllegalStateException();
   }
 }

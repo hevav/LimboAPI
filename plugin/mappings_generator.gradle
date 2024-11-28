@@ -1,0 +1,454 @@
+import groovy.io.FileType
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import groovy.transform.Field
+import java.security.MessageDigest
+
+enum MinecraftVersion {
+
+  MINECRAFT_1_7_2(4),
+  MINECRAFT_1_7_6(5),
+  MINECRAFT_1_8(47),
+  MINECRAFT_1_9(107),
+  MINECRAFT_1_9_1(108),
+  MINECRAFT_1_9_2(109),
+  MINECRAFT_1_9_4(110),
+  MINECRAFT_1_10(210),
+  MINECRAFT_1_11(315),
+  MINECRAFT_1_11_1(316),
+  MINECRAFT_1_12(335),
+  MINECRAFT_1_12_1(338),
+  MINECRAFT_1_12_2(340),
+  MINECRAFT_1_13(393),
+  MINECRAFT_1_13_1(401),
+  MINECRAFT_1_13_2(404),
+  MINECRAFT_1_14(477),
+  MINECRAFT_1_14_1(480),
+  MINECRAFT_1_14_2(485),
+  MINECRAFT_1_14_3(490),
+  MINECRAFT_1_14_4(498),
+  MINECRAFT_1_15(573),
+  MINECRAFT_1_15_1(575),
+  MINECRAFT_1_15_2(578),
+  MINECRAFT_1_16(735),
+  MINECRAFT_1_16_1(736),
+  MINECRAFT_1_16_2(751),
+  MINECRAFT_1_16_3(753),
+  MINECRAFT_1_16_4(754),
+  MINECRAFT_1_17(755),
+  MINECRAFT_1_17_1(756),
+  MINECRAFT_1_18(757),
+  MINECRAFT_1_18_2(758),
+  MINECRAFT_1_19(759),
+  MINECRAFT_1_19_1(760),
+  MINECRAFT_1_19_3(761),
+  MINECRAFT_1_19_4(762),
+  MINECRAFT_1_20(763),
+  MINECRAFT_1_20_2(764),
+  MINECRAFT_1_20_3(765),
+  MINECRAFT_1_20_5(766),
+  MINECRAFT_1_21(767),
+  MINECRAFT_1_21_2(768)
+
+  public static final List<MinecraftVersion> BLOCK_ENTITY_VERSIONS = List.of(
+      MINECRAFT_1_13,
+      MINECRAFT_1_14,
+      MINECRAFT_1_15,
+      MINECRAFT_1_17,
+      MINECRAFT_1_19,
+      MINECRAFT_1_19_3,
+      MINECRAFT_1_19_4,
+      MINECRAFT_1_20,
+      MINECRAFT_1_20_3,
+      MINECRAFT_1_20_5,
+      MINECRAFT_1_21_2
+  )
+
+  public static final List<MinecraftVersion> WORLD_VERSIONS = List.of(
+      MINECRAFT_1_13,
+      MINECRAFT_1_13_2,
+      MINECRAFT_1_14,
+      MINECRAFT_1_15,
+      MINECRAFT_1_16,
+      MINECRAFT_1_16_2,
+      MINECRAFT_1_17,
+      MINECRAFT_1_19,
+      MINECRAFT_1_19_3,
+      MINECRAFT_1_19_4,
+      MINECRAFT_1_20,
+      MINECRAFT_1_20_3,
+      MINECRAFT_1_20_5,
+      MINECRAFT_1_21_2
+  )
+
+  public static final MinecraftVersion MINIMUM_VERSION = MINECRAFT_1_7_2
+  public static final MinecraftVersion MAXIMUM_VERSION = values()[values().length - 1]
+
+  static MinecraftVersion fromVersionName(String name) {
+    return name.equalsIgnoreCase("legacy") ? MINIMUM_VERSION : valueOf("MINECRAFT_" + name.replace('.', '_'))
+  }
+
+  // Cache version name to reduce memory usage in general
+  final String versionName = this.toString().substring(10).replace('_', '.')
+  final int protocolVersion
+
+  MinecraftVersion(int protocolVersion) {
+    this.protocolVersion = protocolVersion
+  }
+
+  String getVersionName() {
+    return this.versionName
+  }
+}
+
+ext() {
+  File buildDirectory = this.getLayout().getBuildDirectory().get().getAsFile()
+  dataDirectory = new File(buildDirectory, "minecraft")
+  generatedDir = new File(buildDirectory, "generated/minecraft")
+  versionManifestFile = new File(dataDirectory, "manifest.json")
+}
+
+sourceSets.main.resources.srcDirs(generatedDir)
+
+tasks.register("downloadManifest") {
+  this.println("> Downloading version manifest...")
+  versionManifestFile.getParentFile().mkdirs()
+  if (checkIsCacheValid(versionManifestFile)) {
+    new URI(manifestUrl).toURL().openStream().transferTo(new FileOutputStream(versionManifestFile))
+  }
+}
+
+boolean checkIsCacheValid(File file) {
+  if (file.exists() && System.currentTimeMillis() - file.lastModified() < Long.parseLong(cacheValidMillis)) {
+    println("> Found cached " + file.getName())
+    return false
+  }
+
+  return true
+}
+
+@Field static final JsonSlurper SLURPER = new JsonSlurper()
+
+File downloadVersionManifest(String version) {
+  this.println("> Downloading ${version} manifest...")
+
+  File output = new File(dataDirectory, "${version}/manifest.json")
+  output.getParentFile().mkdirs()
+  for (Map<String, String> versionInfo : (List<Map<String, String>>) SLURPER.parse(versionManifestFile, "UTF-8")["versions"]) {
+    if (versionInfo["id"] == version) {
+      new URI(versionInfo["url"]).toURL().openStream().transferTo(new FileOutputStream(output))
+      return output
+    }
+  }
+
+  throw new IllegalArgumentException(version)
+}
+
+@SuppressWarnings("GrMethodMayBeStatic")
+File getGeneratedCache(MinecraftVersion version) {
+  File generated = new File(dataDirectory, "${version.getVersionName()}/generated")
+  return new File(generated, "reports/blocks.json").exists()
+      && new File(generated, "reports/${version >= MinecraftVersion.MINECRAFT_1_14 ? "registries" : "items"}.json").exists()
+      && new File(generated, "data/minecraft/tags").exists()
+      ? generated : null
+}
+
+static boolean validateServer(File file, String expected) {
+  if (file == null || !file.exists()) {
+    return false
+  }
+
+  MessageDigest messageDigest = MessageDigest.getInstance("SHA1")
+  file.eachByte(1024 * 1024, (buf, bytesRead) -> messageDigest.update(buf, 0, bytesRead))
+  return new BigInteger(1, messageDigest.digest()).toString(16).padLeft(40, '0') == expected
+}
+
+File getServerJar(String version) {
+  File jarFile = new File(dataDirectory, "${version}/server.jar")
+  Map<String, String> server = (Map<String, String>) SLURPER.parse(this.downloadVersionManifest(version), "UTF-8")["downloads"]["server"]
+  if (!validateServer(jarFile, server["sha1"])) {
+    this.println("> Downloading ${version} server...")
+    jarFile.getParentFile().mkdirs()
+    new URI(server["url"]).toURL().openStream().transferTo(new FileOutputStream(jarFile))
+  }
+
+  return jarFile
+}
+
+@SuppressWarnings("GrDeprecatedAPIUsage")
+File generateData(MinecraftVersion version) {
+  File cache = this.getGeneratedCache(version)
+  if (cache != null) {
+    return cache
+  }
+
+  File jarFile = this.getServerJar(version.getVersionName())
+  File targetDir = new File(jarFile.getParentFile(), "generated")
+
+  targetDir.deleteDir()
+
+  this.javaexec() {
+    classpath(jarFile)
+    if (version >= MinecraftVersion.MINECRAFT_1_18) {
+      jvmArgs("-DbundlerMainClass=net.minecraft.data.Main")
+      setMainClass("net.minecraft.bundler.Main")
+    } else {
+      setMainClass("net.minecraft.data.Main")
+    }
+
+    args("--reports", "--server")
+    workingDir(jarFile.getParentFile())
+  }
+
+  return targetDir
+}
+
+static Map<String, Map<String, String>> getDefaultProperties(Map<String, Map<String, Object>> data) {
+  Map<String, Map<String, String>> defaultProperties = new TreeMap<>(Comparator.naturalOrder())
+  data.forEach((key, block) -> {
+    if (!block.containsKey("properties")) {
+      return
+    }
+
+    for (Map<String, Object> blockState : (List<Map<String, Object>>) block["states"]) {
+      if (blockState["default"]) {
+        defaultProperties[key] = (Map<String, String>) blockState["properties"]
+        break
+      }
+    }
+  })
+  return defaultProperties
+}
+
+static Map<MinecraftVersion, Map<String, String>> loadFallbackMappings(File file) {
+  Map<String, Map<String, String>> fallbackMappings = (Map<String, Map<String, String>>) SLURPER.parse(file, "UTF-8")
+  return MinecraftVersion.values().collectEntries(version -> [version, fallbackMappings.getOrDefault(version.toString(), Collections.emptyMap())])
+}
+
+static Map<MinecraftVersion, Map<String, Integer>> loadLegacyMappings(File file) {
+  Map<String, Map<String, String>> legacyMappings = (Map<String, Map<String, String>>) SLURPER.parse(file, "UTF-8")
+  return legacyMappings.collectEntries((version, mappings) -> [MinecraftVersion.valueOf(version), mappings.collectEntries((block, id) -> [block, Integer.parseInt(id)])])
+}
+
+static int getBlockId(String block, MinecraftVersion version,
+    Map<MinecraftVersion, Map<String, Integer>> mappings, Map<MinecraftVersion, Map<String, Map<String, String>>> properties, Map<MinecraftVersion, Map<String, String>> fallback) {
+  Map<String, Map<String, String>> defaultProperties = version >= MinecraftVersion.MINECRAFT_1_13 ? properties[version] : properties[MinecraftVersion.MINECRAFT_1_18_2]
+
+  String[] split = block.split("\\[")
+  String noArgBlock = split[0]
+
+  MinecraftVersion fallbackVersion = MinecraftVersion.MAXIMUM_VERSION
+  while (fallbackVersion != version) {
+    --fallbackVersion
+    noArgBlock = fallback[fallbackVersion].getOrDefault(noArgBlock, noArgBlock)
+  }
+
+  String targetBlockId = noArgBlock
+  Map<String, String> blockProperties = defaultProperties[noArgBlock]
+  if (blockProperties != null) {
+    Map<String, String> currentProperties = new TreeMap<>(Comparator.naturalOrder())
+    currentProperties.putAll(blockProperties)
+    if (split.length > 1) {
+      for (String argument in split[1].split(",")) {
+        String[] parts = argument.replace("]", "").split("=")
+        if (currentProperties.containsKey(parts[0])) {
+          currentProperties[parts[0]] = parts[1]
+        }
+      }
+    }
+
+    targetBlockId += Arrays.toString(currentProperties.collect((key, value) -> key + "=" + value).toArray()).replace(" ", "")
+  }
+
+  Integer id = mappings[version][targetBlockId]
+  if (id == null && blockProperties != null) {
+    id = mappings[version][noArgBlock + Arrays.toString(new TreeMap<>(blockProperties).collect((key, value) -> key + "=" + value).toArray()).replace(" ", "")]
+  }
+
+  if (id == null) {
+    System.err.println("No ${version.getVersionName()} fallback data for ${noArgBlock}, replacing with minecraft:stone")
+    id = 1
+  }
+
+  return id
+}
+
+static Map<String, Integer> getBlockMappings(Map<String, Map<String, List<Map<String, Object>>>> data, Map<String, Map<String, String>> defaultPropertiesMap) {
+  Map<String, Integer> mappings = new TreeMap<>(Comparator.naturalOrder())
+  data.forEach((blockId, blockData) -> {
+    for (Map<String, Object> blockState : blockData.states) {
+      Map<String, String> stateProperties = (Map<String, String>) blockState["properties"]
+      if (stateProperties) {
+        Map<String, String> properties = new TreeMap<>(defaultPropertiesMap.getOrDefault(blockId, Collections.emptyMap()))
+        properties.putAll(stateProperties)
+        mappings[blockId + Arrays.toString(properties.collect((key, value) -> key + "=" + value).toArray()).replace(" ", "")] = (Integer) blockState["id"]
+      } else {
+        mappings[blockId] = (Integer) blockState["id"]
+      }
+    }
+  })
+  return mappings
+}
+
+void generateBlockMappings(File targetDir, Map<MinecraftVersion, Map<String, Map<String, List<Map<String, Object>>>>> blockReports) {
+  File defaultBlockPropertiesFile = new File(targetDir, "default_block_properties.json")
+  File blockStatesFile = new File(targetDir, "block_states.json")
+  File blockStatesMappingsFile = new File(targetDir, "block_states_mappings.json")
+  File legacyBlocksFile = new File(targetDir, "legacy_blocks.json")
+  if (checkIsCacheValid(defaultBlockPropertiesFile) || checkIsCacheValid(blockStatesFile) || checkIsCacheValid(blockStatesMappingsFile) || checkIsCacheValid(legacyBlocksFile)) {
+    this.println("> Generating default block properties...")
+    Map<MinecraftVersion, Map<String, Map<String, String>>> defaultProperties = blockReports.collectEntries((version, report) -> [version, getDefaultProperties(report)])
+    defaultBlockPropertiesFile.write(JsonOutput.toJson(defaultProperties[MinecraftVersion.MAXIMUM_VERSION]), "UTF-8")
+
+    this.println("> Generating block_states...")
+    Map<MinecraftVersion, Map<String, Integer>> mappings = loadLegacyMappings(new File(this.getProjectDir(), "mappings/legacy_block_mappings.json"))
+    blockReports.forEach((version, report) -> mappings.put(version, getBlockMappings(report, defaultProperties[version])))
+    Map<String, Integer> blocks = mappings[MinecraftVersion.MAXIMUM_VERSION]
+    blockStatesFile.write(JsonOutput.toJson(blocks), "UTF-8")
+
+    this.println("> Generating block_states mappings...")
+    Map<MinecraftVersion, Map<String, String>> fallback = loadFallbackMappings(new File(this.getProjectDir(), "mappings/fallback_data.json"))
+    Map<Integer, Map<Integer, Integer>> blockStateMappings = new TreeMap<>(Integer::compare)
+    blocks.forEach((block, modernId) -> {
+      Map<Integer, Integer> blockMappings = new TreeMap<>(Integer::compare)
+      int lastId = -1
+      for (MinecraftVersion version : MinecraftVersion.values()) {
+        int id = getBlockId(block, version, mappings, defaultProperties, fallback)
+        if (lastId != id) {
+          blockMappings[version.protocolVersion] = lastId = id
+        }
+      }
+
+      blockStateMappings[modernId] = blockMappings
+    })
+    blockStatesMappingsFile.write(JsonOutput.toJson(blockStateMappings), "UTF-8")
+
+    this.println("> Generating legacy blocks...")
+    Map<String, String> legacyData = (Map<String, String>) SLURPER.parse(new File(this.getProjectDir(), "mappings/legacy_blocks.json"), "UTF-8")
+    legacyData.remove("0") // Remove AIR
+    legacyBlocksFile.write(JsonOutput.toJson(legacyData.collectEntries((legacy, modern) -> [legacy, getBlockId(modern, MinecraftVersion.MAXIMUM_VERSION, mappings, defaultProperties, fallback)])), "UTF-8")
+  }
+}
+
+/**
+ * @param excludeLegacy Entries that isn't present in the latest version will be excluded (e.g. minecraft:grass_path will be excluded because it exists only on 1.14-1.16.2)
+ */
+void generateRegistryMappings(String target, File targetDir, Map<MinecraftVersion, Map<String, Map<String, Map<String, Map<String, Integer>>>>> registryReports, boolean excludeLegacy) {
+  File targetMappingsFile = new File(targetDir, "${target}s_mappings.json")
+  if (checkIsCacheValid(targetMappingsFile)) {
+    this.println("> Generating ${target}s mappings...")
+
+    Map<String, Map<Integer, Integer>> mappings = new TreeMap<>(Comparator.naturalOrder())
+
+    def legacyMappings = (Map<String, Map<String, Integer>>) SLURPER.parse(new File(this.getProjectDir(), "mappings/legacy_${target}s_mappings.json"), "UTF-8")
+    mappings.putAll(legacyMappings.collectEntries((key, value) -> [key, value.collectEntries((version, id) -> [MinecraftVersion.fromVersionName(version).protocolVersion, id])]))
+
+    registryReports.forEach((version, registry) -> registry["minecraft:${target}"]["entries"].forEach(
+        (name, value) -> mappings.computeIfAbsent(name, _ -> new TreeMap<>(Integer::compare))[version.protocolVersion] = value["protocol_id"]
+    ))
+
+    if (excludeLegacy) {
+      int max = Collections.max(registryReports.keySet()).protocolVersion
+      mappings.entrySet().removeIf(entry -> !entry.getValue().containsKey(max))
+    }
+
+    mappings.forEach((name, map) -> map.replaceAll((version, id) -> id instanceof String ? Integer.parseInt(id) : id))
+    targetMappingsFile.write(JsonOutput.toJson(mappings), "UTF-8")
+  }
+}
+
+void generateRegistryMappings(File targetDir, Map<MinecraftVersion, Map<String, Map<String, Map<String, Map<String, Integer>>>>> registryReports) {
+  this.generateRegistryMappings("particle_type", targetDir, registryReports, false)
+
+  this.generateRegistryMappings("block_entity_type", targetDir, registryReports.findAll(entry -> MinecraftVersion.BLOCK_ENTITY_VERSIONS.contains(entry.getKey())), false)
+
+  def worldVersions = registryReports.findAll(entry -> MinecraftVersion.WORLD_VERSIONS.contains(entry.getKey()))
+  this.generateRegistryMappings("item", targetDir, worldVersions, true)
+  this.generateRegistryMappings("block", targetDir, worldVersions, true)
+
+  this.generateRegistryMappings("data_component_type", targetDir, registryReports.findAll(entry -> entry.getKey() >= MinecraftVersion.MINECRAFT_1_20_5), false)
+}
+
+static Map<String, Map<String, List<String>>> getTags(File tagDir, Map<String, String> tagTypes) {
+  Map<String, Map<String, List<String>>> tags = new HashMap<>()
+  tagTypes.forEach((directoryName, key) -> {
+    File directory = new File(tagDir, directoryName)
+    if (!directory.exists()) {
+      return
+    }
+
+    Map<String, List<String>> typeTags = new HashMap<>()
+    directory.eachFileRecurse(FileType.FILES, file -> {
+      String tag = directory.toPath().relativize(file.toPath()).toString()
+      typeTags["minecraft:" + tag.take(tag.lastIndexOf('.' as char as int)).replace(File.separatorChar, '/' as char)] = (List<String>) SLURPER.parse(file, "UTF-8")["values"]
+    })
+
+    Map<String, List<String>> tempTags = new HashMap<>()
+    boolean flatten = false
+    while (!flatten) {
+      flatten = true
+      typeTags.forEach((name, currentTags) -> {
+        List<String> newTags = new ArrayList<>()
+        currentTags.forEach(currentTag -> {
+          if (currentTag.charAt(0) == '#' as char) {
+            newTags.addAll(typeTags[currentTag.substring(1)])
+            flatten = false
+          } else {
+            newTags.add(currentTag)
+          }
+        })
+
+        tempTags[name] = newTags
+      })
+
+      typeTags = tempTags
+      tempTags = new HashMap<>()
+    }
+
+    tags[key] = typeTags
+  })
+  return tags
+}
+
+void generateTags(File targetDir, Map<MinecraftVersion, File> tagDirs) {
+  File tagsFile = new File(targetDir, "tags.json")
+  if (checkIsCacheValid(tagsFile)) {
+    this.println("> Generating tags...")
+    Map<String, Map<String, String>> tagTypes = (Map<String, Map<String, String>>) SLURPER.parse(new File(this.getProjectDir(), "mappings/tag_types.json"), "UTF-8")
+    Map<String, Map<String, Set<String>>> mergedTags = new TreeMap<>(Comparator.naturalOrder())
+    tagDirs.forEach((version, dir) -> {
+      getTags(dir, tagTypes["tag_types"]).forEach((type, typeTags) -> {
+        Map<String, Set<String>> mergedTypeTags = mergedTags.computeIfAbsent(type, _ -> new TreeMap<>(Comparator.naturalOrder()))
+        typeTags.forEach((name, values) -> {
+          Set<String> mergedValues = mergedTypeTags.computeIfAbsent(name, _ -> new TreeSet<>(Comparator.naturalOrder()))
+          if (type in tagTypes["supported_tag_types"]) {
+            mergedValues.addAll(values)
+          }
+        })
+      })
+    })
+
+    tagsFile.write(JsonOutput.toJson(mergedTags), "UTF-8")
+  }
+}
+
+tasks.register("generateMappings") {
+  dependsOn(downloadManifest)
+
+  File targetDir = new File(this.project.ext.generatedDir, "mappings")
+  targetDir.mkdirs()
+
+  this.println("> Generating Minecraft data...")
+
+  Map<MinecraftVersion, File> generated = MinecraftVersion.values().findAll(version -> version >= MinecraftVersion.MINECRAFT_1_13).collectEntries(version -> [version, this.generateData(version)])
+  this.generateTags(targetDir, generated.collectEntries((version, directory) -> [version, new File(directory, "data/minecraft/tags")]))
+  this.generateBlockMappings(targetDir, generated.collectEntries((version, directory) -> [version, SLURPER.parse(new File(directory, "reports/blocks.json"), "UTF-8")]))
+
+  // 1.13.x doesn't produce registries.json
+  generated.remove(MinecraftVersion.MINECRAFT_1_13)
+  generated.remove(MinecraftVersion.MINECRAFT_1_13_1)
+  generated.remove(MinecraftVersion.MINECRAFT_1_13_2)
+  this.generateRegistryMappings(targetDir, generated.collectEntries((version, directory) -> [version, SLURPER.parse(new File(directory, "reports/registries.json"), "UTF-8")]))
+}
+
+processResources.dependsOn(generateMappings)

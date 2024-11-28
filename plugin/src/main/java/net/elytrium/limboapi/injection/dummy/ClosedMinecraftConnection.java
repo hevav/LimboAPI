@@ -17,14 +17,14 @@
 
 package net.elytrium.limboapi.injection.dummy;
 
-import com.velocitypowered.proxy.VelocityServer;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
-import io.netty.channel.Channel;
 
 public class ClosedMinecraftConnection extends MinecraftConnection {
 
-  public ClosedMinecraftConnection(Channel channel, VelocityServer server) {
-    super(channel, server);
+  public static final MinecraftConnection INSTANCE = new ClosedMinecraftConnection();
+
+  private ClosedMinecraftConnection() {
+    super(new ClosedChannel(new DummyEventLoop()), null);
   }
 
   @Override

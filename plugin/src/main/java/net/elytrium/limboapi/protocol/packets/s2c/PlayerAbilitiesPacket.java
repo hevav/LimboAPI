@@ -23,21 +23,7 @@ import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 
-public class PlayerAbilitiesPacket implements MinecraftPacket {
-
-  private final byte flags;
-  private final float walkSpeed;
-  private final float flySpeed;
-
-  public PlayerAbilitiesPacket(byte flags, float flySpeed, float walkSpeed) {
-    this.flags = flags;
-    this.flySpeed = flySpeed;
-    this.walkSpeed = walkSpeed;
-  }
-
-  public PlayerAbilitiesPacket() {
-    throw new IllegalStateException();
-  }
+public record PlayerAbilitiesPacket(byte abilities, float flyingSpeed, float walkingSpeed) implements MinecraftPacket {
 
   @Override
   public void decode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
@@ -46,22 +32,13 @@ public class PlayerAbilitiesPacket implements MinecraftPacket {
 
   @Override
   public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
-    buf.writeByte(this.flags);
-    buf.writeFloat(this.flySpeed);
-    buf.writeFloat(this.walkSpeed);
+    buf.writeByte(this.abilities);
+    buf.writeFloat(this.flyingSpeed);
+    buf.writeFloat(this.walkingSpeed);
   }
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
-    return true;
-  }
-
-  @Override
-  public String toString() {
-    return "PlayerAbilities{"
-        + "flags=" + this.flags
-        + ", flySpeed=" + this.flySpeed
-        + ", walkSpeed=" + this.walkSpeed
-        + "}";
+    throw new IllegalStateException();
   }
 }

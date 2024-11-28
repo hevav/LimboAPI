@@ -15,7 +15,7 @@ public interface CompactStorage {
 
   int get(int index);
 
-  void write(Object byteBufObject, ProtocolVersion version);
+  void write(Object buf, ProtocolVersion version);
 
   int getBitsPerEntry();
 

@@ -1,71 +1,105 @@
-//file:noinspection GroovyAssignabilityCheck
-
 plugins() {
   id("java")
 
-  id("checkstyle")
-  id("com.github.spotbugs").version("6.0.12").apply(false)
-  id("org.cadixdev.licenser").version("0.6.1").apply(false)
+  id("org.ajoberstar.grgit").version("5.3.0")
+  /*
+
+  id("com.diffplug.spotless").version("6.25.0").apply(false)
+  id("com.github.spotbugs").version("6.0.26").apply(false)
+
+  */
+  id("com.gradleup.shadow").version("8.3.5")
 }
 
-allprojects() {
+this.group = "net.elytrium"
+this.version = "1.2.0-SNAPSHOT"
+
+if (this.version.endsWith("-SNAPSHOT")) {
+  this.version += "+${grgit.head().abbreviatedId}"
+}
+
+subprojects() {
+  apply(plugin: "java-library")
+  /*
+
+  apply(plugin: "com.diffplug.spotless")
   apply(plugin: "checkstyle")
   apply(plugin: "com.github.spotbugs")
-  apply(plugin: "org.cadixdev.licenser")
 
-  setGroup("net.elytrium.limboapi")
-  setVersion("1.1.27")
+  */
+  tasks.withType(JavaCompile).configureEach() {
+    options.setEncoding("UTF-8")
+  }
 
-  compileJava() {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+  java() {
+    sourceCompatibility = targetCompatibility = JavaVersion.VERSION_17
+  }
+
+  configurations() {
+    api.extendsFrom(shadowApi)
   }
 
   repositories() {
     mavenCentral()
 
     maven() {
-      setName("elytrium-repo")
-      setUrl("https://maven.elytrium.net/repo/")
+      name = "elytrium"
+      url = "https://maven.elytrium.net/repo/"
     }
+
     maven() {
-      setName("papermc-repo")
-      setUrl("https://papermc.io/repo/repository/maven-public/")
+      name = "papermc"
+      url = "https://repo.papermc.io/repository/maven-public/"
+    }
+  }
+  /*
+
+  spotless() {
+    java() {
+      licenseHeaderFile(rootProject.file("HEADER.txt"))
     }
   }
 
   checkstyle() {
-    toolVersion = "10.12.1"
-    configFile = file("$rootDir/config/checkstyle/checkstyle.xml")
-    configProperties = ["configDirectory": "$rootDir/config/checkstyle"]
+    toolVersion = "10.20.1"
+
+    configFile = rootProject.file(".config/checkstyle/checkstyle.xml")
     maxErrors = 0
     maxWarnings = 0
   }
 
-  spotbugs() {
-    excludeFilter = file("${this.getRootDir()}/config/spotbugs/suppressions.xml")
-
-    if (this.project != rootProject) {
-      reports.register("html") {
+  spotbugsMain() {
+    excludeFilter.set(rootProject.file(".config/spotbugs/suppressions.xml"))
+    reports() {
+      html() {
         required = true
-        outputLocation.value(layout.buildDirectory.file("reports/spotbugs/main/spotbugs.html"))
+        outputLocation.value(layout.buildDirectory.file("reports/spotbugs/spotbugs.html"))
         stylesheet = "fancy-hist.xsl"
       }
     }
   }
+  */
 }
 
-String getCurrentShortRevision() {
-  OutputStream outputStream = new ByteArrayOutputStream()
-  exec {
-    if (System.getProperty("os.name").toLowerCase().contains("win")) {
-      commandLine("cmd", "/c", "git rev-parse --short HEAD")
-    } else {
-      commandLine("bash", "-c", "git rev-parse --short HEAD")
-    }
+gradle.projectsEvaluated() {
+  shadowJar() {
+    archiveClassifier = null
 
-    setStandardOutput(outputStream)
+    //enableRelocation = true
+    //relocationPrefix = "${this.group}.${this.rootProject.getName()}.3rdparty"
+    // TODO remove
+    relocate("org.bstats", "net.elytrium.limboapi.thirdparty.org.bstats")
+    relocate("net.elytrium.fastprepare", "net.elytrium.limboapi.thirdparty.fastprepare")
+    relocate("net.elytrium.commons.velocity", "net.elytrium.limboapi.thirdparty.commons.velocity")
+    relocate("net.elytrium.commons.kyori", "net.elytrium.limboapi.thirdparty.commons.kyori")
+    relocate("net.elytrium.commons.config", "net.elytrium.limboapi.thirdparty.commons.config")
+
+    configurations = []
+    this.subprojects.forEach(project -> {
+      configurations.add(project.configurations.shadowApi)
+      from(project.sourceSets.main.output)
+    })
   }
 
-  return outputStream.toString().trim()
+  assemble.dependsOn(shadowJar)
 }

@@ -20,6 +20,8 @@ package net.elytrium.limboapi.file;
 import net.elytrium.limboapi.api.LimboFactory;
 import net.elytrium.limboapi.api.chunk.VirtualWorld;
 import net.elytrium.limboapi.api.file.WorldFile;
+import net.kyori.adventure.nbt.BinaryTag;
+import net.kyori.adventure.nbt.ByteArrayBinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 
 public class MCEditSchematicFile implements WorldFile {
@@ -28,31 +30,27 @@ public class MCEditSchematicFile implements WorldFile {
   private final short height;
   private final short length;
   private final byte[] blocks;
-  private byte[] addBlocks = new byte[0];
+  private final byte[] addBlocks;
 
   public MCEditSchematicFile(CompoundBinaryTag tag) {
     this.width = tag.getShort("Width");
     this.height = tag.getShort("Height");
     this.length = tag.getShort("Length");
     this.blocks = tag.getByteArray("Blocks");
-
-    if (tag.keySet().contains("AddBlocks")) {
-      this.addBlocks = tag.getByteArray("AddBlocks");
-    }
+    BinaryTag addBlocks = tag.get("AddBlocks");
+    this.addBlocks = addBlocks == null ? new byte[0] : ((ByteArrayBinaryTag) addBlocks).value();
   }
 
   @Override
   public void toWorld(LimboFactory factory, VirtualWorld world, int offsetX, int offsetY, int offsetZ, int lightLevel) {
-    short[] blockIDs = new short[this.blocks.length];
-    for (int index = 0; index < blockIDs.length; ++index) {
+    short[] blockIds = new short[this.blocks.length];
+    for (int index = 0; index < blockIds.length; ++index) {
       if ((index >> 1) >= this.addBlocks.length) {
-        blockIDs[index] = (short) (this.blocks[index] & 0xFF);
+        blockIds[index] = (short) (this.blocks[index] & 0xFF);
+      } else if ((index & 1) == 0) {
+        blockIds[index] = (short) (((this.addBlocks[index >> 1] & 0x0F) << 8) + (this.addBlocks[index] & 0xFF));
       } else {
-        if ((index & 1) == 0) {
-          blockIDs[index] = (short) (((this.addBlocks[index >> 1] & 0x0F) << 8) + (this.addBlocks[index] & 0xFF));
-        } else {
-          blockIDs[index] = (short) (((this.addBlocks[index >> 1] & 0xF0) << 4) + (this.addBlocks[index] & 0xFF));
-        }
+        blockIds[index] = (short) (((this.addBlocks[index >> 1] & 0xF0) << 4) + (this.addBlocks[index] & 0xFF));
       }
     }
 
@@ -60,7 +58,7 @@ public class MCEditSchematicFile implements WorldFile {
       for (int posY = 0; posY < this.height; ++posY) {
         for (int posZ = 0; posZ < this.length; ++posZ) {
           int index = (posY * this.length + posZ) * this.width + posX;
-          world.setBlock(posX + offsetX, posY + offsetY, posZ + offsetZ, factory.createSimpleBlock(blockIDs[index]));
+          world.setBlock(posX + offsetX, posY + offsetY, posZ + offsetZ, factory.createSimpleBlock(blockIds[index]));
         }
       }
     }

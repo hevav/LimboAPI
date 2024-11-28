@@ -30,8 +30,6 @@ public class SimpleSection implements BlockSection {
 
   private final BlockStorage blocks;
 
-  private long lastUpdate = System.nanoTime();
-
   public SimpleSection() {
     this(new BlockStorage19(ProtocolVersion.MINECRAFT_1_17));
   }
@@ -40,41 +38,30 @@ public class SimpleSection implements BlockSection {
     this.blocks = blocks;
   }
 
-  public SimpleSection(BlockStorage blocks, long lastUpdate) {
-    this.blocks = blocks;
-    this.lastUpdate = lastUpdate;
-  }
-
   @Override
   public void setBlockAt(int posX, int posY, int posZ, @Nullable VirtualBlock block) {
-    this.checkIndexes(posX, posY, posZ);
+    SimpleSection.checkIndexes(posX, posY, posZ);
     this.blocks.set(posX, posY, posZ, block == null ? SimpleBlock.AIR : block);
-    this.lastUpdate = System.nanoTime();
   }
 
   @Override
   public VirtualBlock getBlockAt(int posX, int posY, int posZ) {
-    this.checkIndexes(posX, posY, posZ);
+    SimpleSection.checkIndexes(posX, posY, posZ);
     return this.blocks.get(posX, posY, posZ);
   }
 
-  private void checkIndexes(int posX, int posY, int posZ) {
-    Preconditions.checkArgument(this.checkIndex(posX), "x should be between 0 and 15");
-    Preconditions.checkArgument(this.checkIndex(posY), "y should be between 0 and 15");
-    Preconditions.checkArgument(this.checkIndex(posZ), "z should be between 0 and 15");
+  @Override
+  public SimpleSection copy() {
+    return new SimpleSection(this.blocks.copy());
   }
 
-  private boolean checkIndex(int pos) {
+  private static void checkIndexes(int posX, int posY, int posZ) {
+    Preconditions.checkArgument(SimpleSection.checkIndex(posX), "x should be between 0 and 15");
+    Preconditions.checkArgument(SimpleSection.checkIndex(posY), "y should be between 0 and 15");
+    Preconditions.checkArgument(SimpleSection.checkIndex(posZ), "z should be between 0 and 15");
+  }
+
+  private static boolean checkIndex(int pos) {
     return pos >= 0 && pos <= 15;
-  }
-
-  @Override
-  public SimpleSection getSnapshot() {
-    return new SimpleSection(this.blocks.copy(), this.lastUpdate);
-  }
-
-  @Override
-  public long getLastUpdate() {
-    return this.lastUpdate;
   }
 }

@@ -29,7 +29,12 @@ public class PacketMapping {
     this.encodeOnly = encodeOnly;
   }
 
+  @Deprecated(forRemoval = true)
   public int getID() {
+    return this.id;
+  }
+
+  public int getId() {
     return this.id;
   }
 

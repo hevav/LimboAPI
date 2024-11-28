@@ -11,13 +11,28 @@ import com.velocitypowered.api.network.ProtocolVersion;
 
 public interface VirtualItem {
 
-  short getID(ProtocolVersion version);
+  @Deprecated(forRemoval = true)
+  default String getModernID() {
+    return this.modernId();
+  }
 
-  short getID(WorldVersion version);
+  String modernId();
 
-  boolean isSupportedOn(ProtocolVersion version);
+  @Deprecated(forRemoval = true)
+  default short getID(WorldVersion version) {
+    return this.itemId(version);
+  }
+
+  short itemId(WorldVersion version);
+
+  @Deprecated(forRemoval = true)
+  default short getID(ProtocolVersion version) {
+    return this.itemId(version);
+  }
+
+  short itemId(ProtocolVersion version);
 
   boolean isSupportedOn(WorldVersion version);
 
-  String getModernID();
+  boolean isSupportedOn(ProtocolVersion version);
 }

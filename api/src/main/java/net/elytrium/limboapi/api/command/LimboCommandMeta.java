@@ -16,13 +16,14 @@ import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+@Deprecated(forRemoval = true)
 public class LimboCommandMeta implements CommandMeta {
 
   @NonNull
   private final Collection<String> aliases;
   @NonNull
   private final Collection<CommandNode<CommandSource>> hints;
-  @Nullable // Why?..
+  @Nullable
   private final Object plugin;
 
   public LimboCommandMeta(@NonNull Collection<String> aliases) {

@@ -1,0 +1,130 @@
+{
+  "minecraft:banner": {
+    "1.11": 19,
+    "1.12": 19,
+    "1.13": 18
+  },
+  "minecraft:beacon": {
+    "1.11": 13,
+    "1.12": 13,
+    "1.13": 13
+  },
+  "minecraft:bed": {
+    "1.12": 24,
+    "1.13": 23
+  },
+  "minecraft:brewing_stand": {
+    "1.11": 10,
+    "1.12": 10,
+    "1.13": 10
+  },
+  "minecraft:chest": {
+    "1.11": 1,
+    "1.12": 1,
+    "1.13": 1
+  },
+  "minecraft:command_block": {
+    "1.11": 22,
+    "1.12": 22,
+    "1.13": 21
+  },
+  "minecraft:comparator": {
+    "1.11": 17,
+    "1.12": 17,
+    "1.13": 17
+  },
+  "minecraft:conduit": {
+    "1.13": 24
+  },
+  "minecraft:daylight_detector": {
+    "1.11": 15,
+    "1.12": 15,
+    "1.13": 15
+  },
+  "minecraft:dispenser": {
+    "1.11": 4,
+    "1.12": 4,
+    "1.13": 5
+  },
+  "minecraft:dropper": {
+    "1.11": 5,
+    "1.12": 5,
+    "1.13": 6
+  },
+  "minecraft:enchanting_table": {
+    "1.11": 11,
+    "1.12": 11,
+    "1.13": 11
+  },
+  "minecraft:end_gateway": {
+    "1.11": 21,
+    "1.12": 21,
+    "1.13": 20
+  },
+  "minecraft:end_portal": {
+    "1.11": 12,
+    "1.12": 12,
+    "1.13": 12
+  },
+  "minecraft:ender_chest": {
+    "1.11": 2,
+    "1.12": 2,
+    "1.13": 3
+  },
+  "minecraft:flower_pot": {
+    "1.11": 18,
+    "1.12": 18
+  },
+  "minecraft:furnace": {
+    "1.11": 0,
+    "1.12": 0,
+    "1.13": 0
+  },
+  "minecraft:hopper": {
+    "1.11": 16,
+    "1.12": 16,
+    "1.13": 16
+  },
+  "minecraft:jukebox": {
+    "1.11": 3,
+    "1.12": 3,
+    "1.13": 4
+  },
+  "minecraft:mob_spawner": {
+    "1.11": 7,
+    "1.12": 7,
+    "1.13": 8
+  },
+  "minecraft:noteblock": {
+    "1.11": 8,
+    "1.12": 8
+  },
+  "minecraft:piston": {
+    "1.11": 9,
+    "1.12": 9,
+    "1.13": 9
+  },
+  "minecraft:shulker_box": {
+    "1.11": 23,
+    "1.12": 23,
+    "1.13": 22
+  },
+  "minecraft:sign": {
+    "1.11": 6,
+    "1.12": 6,
+    "1.13": 7
+  },
+  "minecraft:skull": {
+    "1.11": 14,
+    "1.12": 14,
+    "1.13": 14
+  },
+  "minecraft:structure_block": {
+    "1.11": 20,
+    "1.12": 20,
+    "1.13": 19
+  },
+  "minecraft:trapped_chest": {
+    "1.13": 2
+  }
+}

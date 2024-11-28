@@ -30,6 +30,7 @@ import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.Arrays;
 import net.elytrium.limboapi.api.chunk.util.CompactStorage;
+import net.elytrium.limboapi.protocol.util.LimboProtocolUtils;
 
 public class BitStorage19 implements CompactStorage {
 
@@ -39,7 +40,7 @@ public class BitStorage19 implements CompactStorage {
   private final long maxEntryValue;
 
   public BitStorage19(int bitsPerEntry, int size) {
-    this(bitsPerEntry, new long[((size * bitsPerEntry - 1) >> 6) + 1]);
+    this(bitsPerEntry, new long[((size * Math.max(bitsPerEntry, 4) - 1) >> 6) + 1]);
   }
 
   public BitStorage19(int bitsPerEntry, long[] data) {
@@ -64,7 +65,7 @@ public class BitStorage19 implements CompactStorage {
       int bitIndex = index * this.bitsPerEntry;
       int startIndex = bitIndex >> 6;
       int endIndex = ((index + 1) * this.bitsPerEntry - 1) >> 6;
-      int startBitSubIndex = bitIndex & 63;
+      int startBitSubIndex = bitIndex & 0x3F;
       this.data[startIndex] = this.data[startIndex] & ~(this.maxEntryValue << startBitSubIndex) | ((long) value & this.maxEntryValue) << startBitSubIndex;
       if (startIndex != endIndex) {
         int endBitSubIndex = 64 - startBitSubIndex;
@@ -81,24 +82,17 @@ public class BitStorage19 implements CompactStorage {
       int bitIndex = index * this.bitsPerEntry;
       int startIndex = bitIndex >> 6;
       int endIndex = ((index + 1) * this.bitsPerEntry - 1) >> 6;
-      int startBitSubIndex = bitIndex & 63;
-      if (startIndex == endIndex) {
-        return (int) (this.data[startIndex] >>> startBitSubIndex & this.maxEntryValue);
-      } else {
-        int endBitSubIndex = 64 - startBitSubIndex;
-        return (int) ((this.data[startIndex] >>> startBitSubIndex | this.data[endIndex] << endBitSubIndex) & this.maxEntryValue);
-      }
+      int startBitSubIndex = bitIndex & 0x3F;
+      return (int) (startIndex == endIndex
+          ? (this.data[startIndex] >>> startBitSubIndex & this.maxEntryValue)
+          : (this.data[startIndex] >>> startBitSubIndex | this.data[endIndex] << 64 - startBitSubIndex) & this.maxEntryValue);
     }
   }
 
   @Override
-  public void write(Object byteBufObject, ProtocolVersion version) {
-    Preconditions.checkArgument(byteBufObject instanceof ByteBuf);
-    ByteBuf buf = (ByteBuf) byteBufObject;
-    ProtocolUtils.writeVarInt(buf, this.data.length);
-    for (long l : this.data) {
-      buf.writeLong(l);
-    }
+  public void write(Object bufObj, ProtocolVersion version) {
+    Preconditions.checkArgument(bufObj instanceof ByteBuf);
+    LimboProtocolUtils.writeLongArray((ByteBuf) bufObj, this.data);
   }
 
   @Override

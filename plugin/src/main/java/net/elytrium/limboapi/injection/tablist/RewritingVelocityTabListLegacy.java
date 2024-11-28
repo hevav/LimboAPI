@@ -19,28 +19,15 @@ package net.elytrium.limboapi.injection.tablist;
 
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.player.TabListEntry;
-import com.velocitypowered.proxy.connection.MinecraftConnection;
 import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
-import com.velocitypowered.proxy.tablist.KeyedVelocityTabListEntry;
 import com.velocitypowered.proxy.tablist.VelocityTabListLegacy;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 public class RewritingVelocityTabListLegacy extends VelocityTabListLegacy implements RewritingTabList {
 
-  // To keep compatibility with other plugins that use internal fields
-  protected final ConnectedPlayer player;
-  protected final MinecraftConnection connection;
-  protected final ProxyServer proxyServer;
-  protected final Map<UUID, KeyedVelocityTabListEntry> entries;
-
   public RewritingVelocityTabListLegacy(ConnectedPlayer player, ProxyServer proxyServer) {
     super(player, proxyServer);
-    this.player = super.player;
-    this.connection = super.connection;
-    this.proxyServer = super.proxyServer;
-    this.entries = super.entries;
   }
 
   @Override

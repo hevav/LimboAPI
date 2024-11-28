@@ -23,21 +23,7 @@ import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 
-public class SetExperiencePacket implements MinecraftPacket {
-
-  private final float expBar;
-  private final int level;
-  private final int totalExp;
-
-  public SetExperiencePacket(float expBar, int level, int totalExp) {
-    this.expBar = expBar;
-    this.level = level;
-    this.totalExp = totalExp;
-  }
-
-  public SetExperiencePacket() {
-    throw new IllegalStateException();
-  }
+public record SetExperiencePacket(float experienceProgress, int experienceLevel, int totalExperience) implements MinecraftPacket {
 
   @Override
   public void decode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
@@ -46,27 +32,18 @@ public class SetExperiencePacket implements MinecraftPacket {
 
   @Override
   public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
-    buf.writeFloat(this.expBar);
-    if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0) {
-      buf.writeShort(this.level);
-      buf.writeShort(this.totalExp);
+    buf.writeFloat(this.experienceProgress);
+    if (protocolVersion.noGreaterThan(ProtocolVersion.MINECRAFT_1_7_6)) {
+      buf.writeShort(this.experienceLevel);
+      buf.writeShort(this.totalExperience);
     } else {
-      ProtocolUtils.writeVarInt(buf, this.level);
-      ProtocolUtils.writeVarInt(buf, this.totalExp);
+      ProtocolUtils.writeVarInt(buf, this.experienceLevel);
+      ProtocolUtils.writeVarInt(buf, this.totalExperience);
     }
   }
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
-    return true;
-  }
-
-  @Override
-  public String toString() {
-    return "SetExperience{"
-        + "expBar=" + this.expBar
-        + ", level=" + this.level
-        + ", totalExp=" + this.totalExp
-        + "}";
+    throw new IllegalStateException();
   }
 }

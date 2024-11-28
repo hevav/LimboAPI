@@ -27,7 +27,7 @@ public class Settings extends YamlConfig {
   public static final Settings IMP = new Settings();
 
   @Final
-  public String VERSION = BuildConstants.LIMBO_VERSION;
+  public String VERSION = "BuildConstants.LIMBO_VERSION"; // TODO
 
   @Comment({
       "Available serializers:",

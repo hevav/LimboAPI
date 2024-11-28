@@ -8,19 +8,41 @@
 package net.elytrium.limboapi.api.protocol.item;
 
 import com.velocitypowered.api.network.ProtocolVersion;
-import java.util.List;
+import java.util.Map;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
+/**
+ * @sinceMinecraft 1.20.5
+ */
 public interface ItemComponentMap {
 
-  <T> ItemComponentMap add(ProtocolVersion version, String name, T value);
+  @Deprecated(forRemoval = true)
+  default <T> ItemComponentMap add(ProtocolVersion version, String name, T value) {
+    return this.put(DataComponentType.valueOf(name.substring(10/*"minecraft:".length()*/).toUpperCase()), value);
+  }
 
-  ItemComponentMap remove(ProtocolVersion version, String name);
+  @Deprecated(forRemoval = true)
+  default ItemComponentMap remove(ProtocolVersion version, String name) {
+    this.remove(DataComponentType.valueOf(name.substring(10/*"minecraft:".length()*/).toUpperCase()));
+    return this;
+  }
 
-  List<ItemComponent> getAdded();
+  <T> ItemComponentMap put(DataComponentType type, T value);
 
-  List<ItemComponent> getRemoved();
+  <T> ItemComponent<T> remove(DataComponentType type);
 
-  void read(ProtocolVersion version, Object buffer);
+  <T> T get(DataComponentType type);
 
-  void write(ProtocolVersion version, Object buffer);
+  <T> T getOrDefault(DataComponentType type, T defaultValue);
+
+  Map<DataComponentType, @Nullable ItemComponent<?>> getComponents();
+
+  ItemComponentMap read(Object buf, ProtocolVersion version);
+
+  @Deprecated(forRemoval = true)
+  default void write(ProtocolVersion version, Object buf) {
+    this.write(buf, version);
+  }
+
+  ItemComponentMap write(Object buf, ProtocolVersion version);
 }

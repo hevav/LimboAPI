@@ -16,7 +16,15 @@ public interface BlockSection {
 
   VirtualBlock getBlockAt(int posX, int posY, int posZ);
 
-  BlockSection getSnapshot();
+  @Deprecated(forRemoval = true)
+  default BlockSection getSnapshot() {
+    return this.copy();
+  }
 
-  long getLastUpdate();
+  BlockSection copy();
+
+  @Deprecated(forRemoval = true)
+  default long getLastUpdate() {
+    return 0;
+  }
 }

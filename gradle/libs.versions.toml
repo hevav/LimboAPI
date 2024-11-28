@@ -1,0 +1,19 @@
+[versions]
+velocity = "3.4.0-SNAPSHOT"
+
+# TODO
+[libraries]
+velocity-api = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
+velocity-proxy = { module = "com.velocitypowered:velocity-proxy", version.ref = "velocity" } # from Elytrium repo
+
+[bundles]
+velocity = ["velocity-proxy"]
+
+[plugins]
+grgit = "org.ajoberstar.grgit:5.2.2"
+buildconfig = "com.github.gmazzo.buildconfig:5.3.5" # kotlin 💀
+
+spotless = "com.diffplug.spotless:6.25.0"
+spotbugs = "com.github.spotbugs:6.0.13"
+
+modrinth = "com:1"

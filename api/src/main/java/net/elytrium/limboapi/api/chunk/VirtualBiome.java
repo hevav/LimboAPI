@@ -11,5 +11,10 @@ public interface VirtualBiome {
 
   String getName();
 
-  int getID();
+  @Deprecated(forRemoval = true)
+  default int getID() {
+    return this.getId();
+  }
+
+  int getId();
 }

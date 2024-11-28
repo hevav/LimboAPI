@@ -17,6 +17,8 @@ public interface VirtualWorld {
 
   void setBlockEntity(int posX, int posY, int posZ, @Nullable CompoundBinaryTag nbt, @Nullable VirtualBlockEntity blockEntity);
 
+  void setBlock(int posX, int posY, int posZ, @Nullable VirtualBlock block);
+
   @NonNull
   VirtualBlock getBlock(int posX, int posY, int posZ);
 
@@ -55,6 +57,4 @@ public interface VirtualWorld {
   float getYaw();
 
   float getPitch();
-
-  void setBlock(int posX, int posY, int posZ, @Nullable VirtualBlock block);
 }

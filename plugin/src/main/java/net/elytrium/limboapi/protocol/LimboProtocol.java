@@ -25,8 +25,6 @@ import io.netty.util.collection.IntObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,38 +37,36 @@ import net.elytrium.commons.utils.reflection.ReflectionException;
 import net.elytrium.limboapi.api.protocol.PacketDirection;
 import net.elytrium.limboapi.api.protocol.packets.PacketMapping;
 import net.elytrium.limboapi.api.utils.OverlayMap;
+import net.elytrium.limboapi.protocol.packets.c2s.AcceptTeleportationPacket;
+import net.elytrium.limboapi.protocol.packets.c2s.ChatSessionUpdatePacket;
 import net.elytrium.limboapi.protocol.packets.c2s.MoveOnGroundOnlyPacket;
 import net.elytrium.limboapi.protocol.packets.c2s.MovePacket;
 import net.elytrium.limboapi.protocol.packets.c2s.MovePositionOnlyPacket;
 import net.elytrium.limboapi.protocol.packets.c2s.MoveRotationOnlyPacket;
-import net.elytrium.limboapi.protocol.packets.c2s.PlayerChatSessionPacket;
-import net.elytrium.limboapi.protocol.packets.c2s.TeleportConfirmPacket;
-import net.elytrium.limboapi.protocol.packets.s2c.ChangeGameStatePacket;
+import net.elytrium.limboapi.protocol.packets.s2c.BlockEntityDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.ChunkDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.ChunkUnloadPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.DefaultSpawnPositionPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.GameEventPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.LightUpdatePacket;
 import net.elytrium.limboapi.protocol.packets.s2c.MapDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.PlayerAbilitiesPacket;
-import net.elytrium.limboapi.protocol.packets.s2c.PositionRotationPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.PlayerPositionPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.SetChunkCacheCenterPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.SetEntityDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.SetExperiencePacket;
 import net.elytrium.limboapi.protocol.packets.s2c.SetSlotPacket;
-import net.elytrium.limboapi.protocol.packets.s2c.TimeUpdatePacket;
+import net.elytrium.limboapi.protocol.packets.s2c.SetTimePacket;
+import net.elytrium.limboapi.protocol.packets.s2c.UpdateSignPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.UpdateTagsPacket;
-import net.elytrium.limboapi.protocol.packets.s2c.UpdateViewPositionPacket;
 import net.elytrium.limboapi.utils.OverlayIntObjectMap;
 import net.elytrium.limboapi.utils.OverlayObject2IntMap;
-import sun.misc.Unsafe;
+import net.elytrium.limboapi.utils.Reflection;
 
 @SuppressWarnings("unchecked")
 public class LimboProtocol {
 
-  private static final StateRegistry LIMBO_STATE_REGISTRY;
-  private static final MethodHandle REGISTER_METHOD;
-  private static final MethodHandle PACKET_MAPPING_CONSTRUCTOR;
-  private static final Unsafe UNSAFE;
-
   public static final String READ_TIMEOUT = "limboapi-read-timeout";
-
   public static final MethodHandle VERSIONS_GETTER;
   public static final Field VERSIONS_FIELD;
   public static final MethodHandle PACKET_ID_TO_SUPPLIER_GETTER;
@@ -83,34 +79,28 @@ public class LimboProtocol {
   public static final StateRegistry.PacketRegistry LIMBO_SERVERBOUND_REGISTRY;
   public static final MethodHandle SERVERBOUND_REGISTRY_GETTER;
   public static final MethodHandle CLIENTBOUND_REGISTRY_GETTER;
+  private static final StateRegistry LIMBO_STATE_REGISTRY;
+  private static final MethodHandle REGISTER_METHOD;
+  private static final MethodHandle PACKET_MAPPING_CONSTRUCTOR;
 
   static {
     try {
-      Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
-      unsafeField.setAccessible(true);
-      UNSAFE = (Unsafe) unsafeField.get(null);
+      LIMBO_STATE_REGISTRY = (StateRegistry) Reflection.UNSAFE.allocateInstance(StateRegistry.class);
 
-      LIMBO_STATE_REGISTRY = (StateRegistry) UNSAFE.allocateInstance(StateRegistry.class);
-
-      VERSIONS_GETTER = MethodHandles.privateLookupIn(StateRegistry.PacketRegistry.class, MethodHandles.lookup())
-          .findGetter(StateRegistry.PacketRegistry.class, "versions", Map.class);
+      VERSIONS_GETTER = Reflection.findGetter(StateRegistry.PacketRegistry.class, "versions", Map.class);
       VERSIONS_FIELD = StateRegistry.PacketRegistry.class.getDeclaredField("versions");
       VERSIONS_FIELD.setAccessible(true);
 
-      PACKET_ID_TO_SUPPLIER_GETTER = MethodHandles.privateLookupIn(StateRegistry.PacketRegistry.ProtocolRegistry.class, MethodHandles.lookup())
-          .findGetter(StateRegistry.PacketRegistry.ProtocolRegistry.class, "packetIdToSupplier", IntObjectMap.class);
+      PACKET_ID_TO_SUPPLIER_GETTER = Reflection.findGetter(StateRegistry.PacketRegistry.ProtocolRegistry.class, "packetIdToSupplier", IntObjectMap.class);
       PACKET_ID_TO_SUPPLIER_FIELD = StateRegistry.PacketRegistry.ProtocolRegistry.class.getDeclaredField("packetIdToSupplier");
       PACKET_ID_TO_SUPPLIER_FIELD.setAccessible(true);
 
-      PACKET_CLASS_TO_ID_GETTER = MethodHandles.privateLookupIn(StateRegistry.PacketRegistry.ProtocolRegistry.class, MethodHandles.lookup())
-          .findGetter(StateRegistry.PacketRegistry.ProtocolRegistry.class, "packetClassToId", Object2IntMap.class);
+      PACKET_CLASS_TO_ID_GETTER = Reflection.findGetter(StateRegistry.PacketRegistry.ProtocolRegistry.class, "packetClassToId", Object2IntMap.class);
       PACKET_CLASS_TO_ID_FIELD = StateRegistry.PacketRegistry.ProtocolRegistry.class.getDeclaredField("packetClassToId");
       PACKET_CLASS_TO_ID_FIELD.setAccessible(true);
 
-      CLIENTBOUND_REGISTRY_GETTER = MethodHandles.privateLookupIn(StateRegistry.class, MethodHandles.lookup())
-          .findGetter(StateRegistry.class, "clientbound", StateRegistry.PacketRegistry.class);
-      SERVERBOUND_REGISTRY_GETTER = MethodHandles.privateLookupIn(StateRegistry.class, MethodHandles.lookup())
-          .findGetter(StateRegistry.class, "serverbound", StateRegistry.PacketRegistry.class);
+      CLIENTBOUND_REGISTRY_GETTER = Reflection.findGetter(StateRegistry.class, "clientbound", StateRegistry.PacketRegistry.class);
+      SERVERBOUND_REGISTRY_GETTER = Reflection.findGetter(StateRegistry.class, "serverbound", StateRegistry.PacketRegistry.class);
 
       PLAY_CLIENTBOUND_REGISTRY = (StateRegistry.PacketRegistry) CLIENTBOUND_REGISTRY_GETTER.invokeExact(StateRegistry.PLAY);
       PLAY_SERVERBOUND_REGISTRY = (StateRegistry.PacketRegistry) SERVERBOUND_REGISTRY_GETTER.invokeExact(StateRegistry.PLAY);
@@ -121,21 +111,16 @@ public class LimboProtocol {
       LIMBO_CLIENTBOUND_REGISTRY = (StateRegistry.PacketRegistry) CLIENTBOUND_REGISTRY_GETTER.invokeExact(LIMBO_STATE_REGISTRY);
       LIMBO_SERVERBOUND_REGISTRY = (StateRegistry.PacketRegistry) SERVERBOUND_REGISTRY_GETTER.invokeExact(LIMBO_STATE_REGISTRY);
 
-      REGISTER_METHOD = MethodHandles.privateLookupIn(StateRegistry.PacketRegistry.class, MethodHandles.lookup())
-          .findVirtual(StateRegistry.PacketRegistry.class, "register",
-              MethodType.methodType(void.class, Class.class, Supplier.class, StateRegistry.PacketMapping[].class));
+      REGISTER_METHOD = Reflection.findVirtualVoid(StateRegistry.PacketRegistry.class, "register", Class.class, Supplier.class, StateRegistry.PacketMapping[].class);
 
-      PACKET_MAPPING_CONSTRUCTOR = MethodHandles.privateLookupIn(StateRegistry.PacketRegistry.class, MethodHandles.lookup())
-          .findConstructor(StateRegistry.PacketMapping.class,
-              MethodType.methodType(void.class, int.class, ProtocolVersion.class, ProtocolVersion.class, boolean.class));
-    } catch (Throwable e) {
-      throw new ReflectionException(e);
+      PACKET_MAPPING_CONSTRUCTOR = Reflection.findConstructor(StateRegistry.PacketMapping.class, int.class, ProtocolVersion.class, ProtocolVersion.class, boolean.class);
+    } catch (Throwable t) {
+      throw new ReflectionException(t);
     }
   }
 
-  private static void overlayRegistry(StateRegistry stateRegistry,
-                                      String registryName, StateRegistry.PacketRegistry playRegistry) throws Throwable {
-    StateRegistry.PacketRegistry registry = (StateRegistry.PacketRegistry) UNSAFE.allocateInstance(StateRegistry.PacketRegistry.class);
+  private static void overlayRegistry(StateRegistry stateRegistry, String registryName, StateRegistry.PacketRegistry playRegistry) throws Throwable {
+    StateRegistry.PacketRegistry registry = (StateRegistry.PacketRegistry) Reflection.UNSAFE.allocateInstance(StateRegistry.PacketRegistry.class);
 
     Field directionField = StateRegistry.PacketRegistry.class.getDeclaredField("direction");
     directionField.setAccessible(true);
@@ -144,15 +129,13 @@ public class LimboProtocol {
     Field versionField = StateRegistry.PacketRegistry.ProtocolRegistry.class.getDeclaredField("version");
     versionField.setAccessible(true);
 
-    // Overlay packets from PLAY state registry.
-    // P.S. I hate it when someone uses var in code, but there I had no choice.
-    var playProtocolRegistryVersions =
-        (Map<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry>) VERSIONS_GETTER.invokeExact(playRegistry);
-    Map<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry> versions = new EnumMap<>(ProtocolVersion.class);
+    // Overlay packets from PLAY state registry
+    var playProtocolRegistryVersions = (Map<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry>) VERSIONS_GETTER.invokeExact(playRegistry);
+    EnumMap<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry> versions = new EnumMap<>(ProtocolVersion.class);
     for (ProtocolVersion version : ProtocolVersion.values()) {
       if (!version.isLegacy() && !version.isUnknown()) {
         StateRegistry.PacketRegistry.ProtocolRegistry playProtoRegistry = playProtocolRegistryVersions.get(version);
-        var protoRegistry = (StateRegistry.PacketRegistry.ProtocolRegistry) UNSAFE.allocateInstance(StateRegistry.PacketRegistry.ProtocolRegistry.class);
+        var protoRegistry = (StateRegistry.PacketRegistry.ProtocolRegistry) Reflection.UNSAFE.allocateInstance(StateRegistry.PacketRegistry.ProtocolRegistry.class);
 
         versionField.set(protoRegistry, version);
 
@@ -181,7 +164,7 @@ public class LimboProtocol {
 
   public static void init() throws Throwable {
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        ChangeGameStatePacket.class, ChangeGameStatePacket::new,
+        GameEventPacket.class, null,
         createMapping(0x2B, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x1E, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x20, ProtocolVersion.MINECRAFT_1_13, true),
@@ -199,7 +182,7 @@ public class LimboProtocol {
         createMapping(0x23, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        ChunkDataPacket.class, ChunkDataPacket::new,
+        ChunkDataPacket.class, null,
         createMapping(0x21, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x20, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x22, ProtocolVersion.MINECRAFT_1_13, true),
@@ -217,7 +200,38 @@ public class LimboProtocol {
         createMapping(0x28, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        ChunkUnloadPacket.class, ChunkUnloadPacket::new,
+        LightUpdatePacket.class, null,
+        createMapping(0x24, ProtocolVersion.MINECRAFT_1_14, true),
+        createMapping(0x25, ProtocolVersion.MINECRAFT_1_15, true),
+        createMapping(0x24, ProtocolVersion.MINECRAFT_1_16, true),
+        createMapping(0x23, ProtocolVersion.MINECRAFT_1_16_2, true),
+        createMapping(0x25, ProtocolVersion.MINECRAFT_1_17, true),
+        createMapping(0x22, ProtocolVersion.MINECRAFT_1_19, true),
+        createMapping(0x24, ProtocolVersion.MINECRAFT_1_19_1, true),
+        createMapping(0x23, ProtocolVersion.MINECRAFT_1_19_3, true),
+        createMapping(0x27, ProtocolVersion.MINECRAFT_1_19_4, true),
+        createMapping(0x28, ProtocolVersion.MINECRAFT_1_20_2, true),
+        createMapping(0x2A, ProtocolVersion.MINECRAFT_1_20_5, true),
+        createMapping(0x2B, ProtocolVersion.MINECRAFT_1_21_2, true)
+    );
+    register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
+        BlockEntityDataPacket.class, null,
+        createMapping(0x35, ProtocolVersion.MINECRAFT_1_7_2, true),
+        createMapping(0x09, ProtocolVersion.MINECRAFT_1_9, true),
+        createMapping(0x0A, ProtocolVersion.MINECRAFT_1_15, true),
+        createMapping(0x09, ProtocolVersion.MINECRAFT_1_16, true),
+        createMapping(0x0A, ProtocolVersion.MINECRAFT_1_17, true),
+        createMapping(0x07, ProtocolVersion.MINECRAFT_1_19, true),
+        createMapping(0x08, ProtocolVersion.MINECRAFT_1_19_4, true),
+        createMapping(0x07, ProtocolVersion.MINECRAFT_1_20_2, true)
+    );
+    register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
+        UpdateSignPacket.class, null,
+        createMapping(0x33, ProtocolVersion.MINECRAFT_1_7_2, true),
+        createMapping(0x46, ProtocolVersion.MINECRAFT_1_9, ProtocolVersion.MINECRAFT_1_9_2, true)
+    );
+    register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
+        ChunkUnloadPacket.class, null,
         // on <=1.8, there is no ChunkUnload; its role is handled by specially encoded ChunkData, so the id will be the same as for ChunkData
         createMapping(0x21, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x1D, ProtocolVersion.MINECRAFT_1_9, true),
@@ -236,7 +250,7 @@ public class LimboProtocol {
         createMapping(0x22, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        DefaultSpawnPositionPacket.class, DefaultSpawnPositionPacket::new,
+        DefaultSpawnPositionPacket.class, null,
         createMapping(0x05, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x43, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x45, ProtocolVersion.MINECRAFT_1_12, true),
@@ -256,7 +270,7 @@ public class LimboProtocol {
         createMapping(0x5B, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        MapDataPacket.class, MapDataPacket::new,
+        MapDataPacket.class, null,
         createMapping(0x34, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x24, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x26, ProtocolVersion.MINECRAFT_1_13, true),
@@ -273,7 +287,7 @@ public class LimboProtocol {
         createMapping(0x2D, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        PlayerAbilitiesPacket.class, PlayerAbilitiesPacket::new,
+        PlayerAbilitiesPacket.class, null,
         createMapping(0x39, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x2B, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x2C, ProtocolVersion.MINECRAFT_1_12_1, true),
@@ -292,7 +306,7 @@ public class LimboProtocol {
         createMapping(0x3A, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        PositionRotationPacket.class, PositionRotationPacket::new,
+        PlayerPositionPacket.class, null,
         createMapping(0x08, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x2E, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x2F, ProtocolVersion.MINECRAFT_1_12_1, true),
@@ -311,7 +325,7 @@ public class LimboProtocol {
         createMapping(0x42, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        SetExperiencePacket.class, SetExperiencePacket::new,
+        SetExperiencePacket.class, null,
         createMapping(0x1F, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x3D, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x3F, ProtocolVersion.MINECRAFT_1_12, true),
@@ -329,7 +343,7 @@ public class LimboProtocol {
         createMapping(0x61, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        SetSlotPacket.class, SetSlotPacket::new,
+        SetSlotPacket.class, null,
         createMapping(0x2F, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x16, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x17, ProtocolVersion.MINECRAFT_1_13, true),
@@ -344,7 +358,7 @@ public class LimboProtocol {
         createMapping(0x15, ProtocolVersion.MINECRAFT_1_20_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        TimeUpdatePacket.class, TimeUpdatePacket::new,
+        SetTimePacket.class, null,
         createMapping(0x03, ProtocolVersion.MINECRAFT_1_7_2, true),
         createMapping(0x44, ProtocolVersion.MINECRAFT_1_9, true),
         createMapping(0x46, ProtocolVersion.MINECRAFT_1_12, true),
@@ -364,7 +378,7 @@ public class LimboProtocol {
         createMapping(0x6B, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        UpdateViewPositionPacket.class, UpdateViewPositionPacket::new, // ViewCentre, ChunkRenderDistanceCenter
+        SetChunkCacheCenterPacket.class, null, // ViewCentre, ChunkRenderDistanceCenter
         createMapping(0x40, ProtocolVersion.MINECRAFT_1_14, true),
         createMapping(0x41, ProtocolVersion.MINECRAFT_1_15, true),
         createMapping(0x40, ProtocolVersion.MINECRAFT_1_16, true),
@@ -379,7 +393,7 @@ public class LimboProtocol {
         createMapping(0x58, ProtocolVersion.MINECRAFT_1_21_2, true)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.CLIENTBOUND,
-        UpdateTagsPacket.class, UpdateTagsPacket::new,
+        UpdateTagsPacket.class, null,
         createMapping(0x55, ProtocolVersion.MINECRAFT_1_13, true),
         createMapping(0x5B, ProtocolVersion.MINECRAFT_1_14, true),
         createMapping(0x5C, ProtocolVersion.MINECRAFT_1_15, true),
@@ -473,67 +487,71 @@ public class LimboProtocol {
         createMapping(0x1F, ProtocolVersion.MINECRAFT_1_21_2, false)
     );
     register(LIMBO_STATE_REGISTRY, PacketDirection.SERVERBOUND,
-        TeleportConfirmPacket.class, TeleportConfirmPacket::new,
+        AcceptTeleportationPacket.class, AcceptTeleportationPacket::new,
         createMapping(0x00, ProtocolVersion.MINECRAFT_1_9, false)
     );
 
     register(PLAY_SERVERBOUND_REGISTRY,
-        PlayerChatSessionPacket.class, PlayerChatSessionPacket::new,
+        ChatSessionUpdatePacket.class, ChatSessionUpdatePacket::new,
         createMapping(0x20, ProtocolVersion.MINECRAFT_1_19_3, false),
         createMapping(0x06, ProtocolVersion.MINECRAFT_1_19_4, false),
         createMapping(0x07, ProtocolVersion.MINECRAFT_1_20_5, false),
         createMapping(0x08, ProtocolVersion.MINECRAFT_1_21_2, false)
     );
+
+    register(PLAY_CLIENTBOUND_REGISTRY,
+        SetEntityDataPacket.class, SetEntityDataPacket::new,
+        createMapping(0x1C, ProtocolVersion.MINECRAFT_1_7_2, false),
+        createMapping(0x39, ProtocolVersion.MINECRAFT_1_9, false),
+        createMapping(0x3B, ProtocolVersion.MINECRAFT_1_12, false),
+        createMapping(0x3C, ProtocolVersion.MINECRAFT_1_12_1, false),
+        createMapping(0x3F, ProtocolVersion.MINECRAFT_1_13, false),
+        createMapping(0x43, ProtocolVersion.MINECRAFT_1_14, false),
+        createMapping(0x44, ProtocolVersion.MINECRAFT_1_15, false),
+        createMapping(0x4D, ProtocolVersion.MINECRAFT_1_17, false),
+        createMapping(0x50, ProtocolVersion.MINECRAFT_1_19_1, false),
+        createMapping(0x4E, ProtocolVersion.MINECRAFT_1_19_3, false),
+        createMapping(0x52, ProtocolVersion.MINECRAFT_1_19_4, false),
+        createMapping(0x54, ProtocolVersion.MINECRAFT_1_20_2, false),
+        createMapping(0x56, ProtocolVersion.MINECRAFT_1_20_3, false),
+        createMapping(0x58, ProtocolVersion.MINECRAFT_1_20_5, false),
+        createMapping(0x5D, ProtocolVersion.MINECRAFT_1_21_2, false)
+    );
   }
 
   public static StateRegistry createLocalStateRegistry() {
     try {
-      StateRegistry stateRegistry = (StateRegistry) UNSAFE.allocateInstance(StateRegistry.class);
+      StateRegistry stateRegistry = (StateRegistry) Reflection.UNSAFE.allocateInstance(StateRegistry.class);
       overlayRegistry(stateRegistry, "clientbound", LIMBO_CLIENTBOUND_REGISTRY);
       overlayRegistry(stateRegistry, "serverbound", LIMBO_SERVERBOUND_REGISTRY);
       return stateRegistry;
-    } catch (Throwable e) {
-      throw new ReflectionException(e);
+    } catch (Throwable t) {
+      throw new ReflectionException(t);
     }
   }
 
-  public static void register(StateRegistry stateRegistry,
-                              PacketDirection direction, Class<?> packetClass, Supplier<?> packetSupplier, PacketMapping[] mappings) {
+  public static void register(StateRegistry stateRegistry, PacketDirection direction, Class<?> packetClass, Supplier<?> packetSupplier, PacketMapping[] mappings) {
     register(stateRegistry, direction, packetClass, packetSupplier, Arrays.stream(mappings).map(mapping -> {
       try {
-        return createMapping(mapping.getID(), mapping.getProtocolVersion(), mapping.getLastValidProtocolVersion(), mapping.isEncodeOnly());
-      } catch (Throwable e) {
-        throw new ReflectionException(e);
+        return createMapping(mapping.getId(), mapping.getProtocolVersion(), mapping.getLastValidProtocolVersion(), mapping.isEncodeOnly());
+      } catch (Throwable t) {
+        throw new ReflectionException(t);
       }
     }).toArray(StateRegistry.PacketMapping[]::new));
   }
 
-  public static void register(StateRegistry stateRegistry,
-                              PacketDirection direction, Class<?> packetClass, Supplier<?> packetSupplier, StateRegistry.PacketMapping... mappings) {
-    MethodHandle registryGetter;
-    switch (direction) {
-      case CLIENTBOUND: {
-        registryGetter = CLIENTBOUND_REGISTRY_GETTER;
-        break;
-      }
-      case SERVERBOUND: {
-        registryGetter = SERVERBOUND_REGISTRY_GETTER;
-        break;
-      }
-      default: {
-        throw new IllegalStateException("Unexpected value: " + direction);
-      }
-    }
-
+  public static void register(StateRegistry stateRegistry, PacketDirection direction, Class<?> packetClass, Supplier<?> packetSupplier, StateRegistry.PacketMapping... mappings) {
     try {
-      register((StateRegistry.PacketRegistry) registryGetter.invokeExact(stateRegistry), packetClass, packetSupplier, mappings);
-    } catch (Throwable e) {
-      throw new ReflectionException(e);
+      register((StateRegistry.PacketRegistry) (switch (direction) {
+        case CLIENTBOUND -> CLIENTBOUND_REGISTRY_GETTER;
+        case SERVERBOUND -> SERVERBOUND_REGISTRY_GETTER;
+      }).invokeExact(stateRegistry), packetClass, packetSupplier, mappings);
+    } catch (Throwable t) {
+      throw new ReflectionException(t);
     }
   }
 
-  public static void register(StateRegistry.PacketRegistry registry,
-                              Class<?> packetClass, Supplier<?> packetSupplier, StateRegistry.PacketMapping... mappings) {
+  public static void register(StateRegistry.PacketRegistry registry, Class<?> packetClass, Supplier<?> packetSupplier, StateRegistry.PacketMapping... mappings) {
     try {
       var versions = (Map<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry>) VERSIONS_GETTER.invokeExact(registry);
       List<OverlayMap<?, ?>> overlayMaps = versions.values().stream().flatMap(protocolRegistry -> {
@@ -548,16 +566,15 @@ public class LimboProtocol {
           } else {
             return Stream.empty();
           }
-        } catch (Throwable e) {
-          throw new ReflectionException(e);
+        } catch (Throwable t) {
+          throw new ReflectionException(t);
         }
       }).toList();
-
       overlayMaps.forEach(overlayMap -> overlayMap.setOverride(true));
       REGISTER_METHOD.invokeExact(registry, packetClass, packetSupplier, mappings);
       overlayMaps.forEach(overlayMap -> overlayMap.setOverride(false));
-    } catch (Throwable e) {
-      throw new ReflectionException(e);
+    } catch (Throwable t) {
+      throw new ReflectionException(t);
     }
   }
 
@@ -565,8 +582,7 @@ public class LimboProtocol {
     return createMapping(id, version, null, encodeOnly);
   }
 
-  private static StateRegistry.PacketMapping createMapping(int id, ProtocolVersion version, ProtocolVersion lastValidProtocolVersion, boolean encodeOnly)
-      throws Throwable {
+  private static StateRegistry.PacketMapping createMapping(int id, ProtocolVersion version, ProtocolVersion lastValidProtocolVersion, boolean encodeOnly) throws Throwable {
     return (StateRegistry.PacketMapping) PACKET_MAPPING_CONSTRUCTOR.invokeExact(id, version, lastValidProtocolVersion, encodeOnly);
   }
 

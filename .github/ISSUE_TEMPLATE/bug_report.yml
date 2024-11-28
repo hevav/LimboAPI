@@ -1,0 +1,78 @@
+# Borrowed from ViaVersion
+name: Bug Report
+description: Report a bug or console error
+labels: [ Unconfirmed ]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before reporting a bug, please see if using master/dev builds from https://modrinth.com/plugin/limboapi/ fixes your issue.**
+        Whenever you see fit, you can upload images or videos to any of the text fields.
+  - type: textarea
+    attributes:
+      label: "`/velocity dump` Output"
+      description: |
+        Run `/velocity dump` in the console or in the chat, then attach produced report file here or upload it to the mclo.gs.
+      value: |
+        ```
+        Attach report file here or put the mclo.gs link or text here.
+        ```
+      placeholder: Please do not remove the grave accents; simply replace the line of text in the middle.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Console Error
+      description: |
+        If you encounter warnings/errors in your console, **paste them with https://mclo.gs/ and put the paste link here**.
+        If the error is small/less than 10 lines, you may put it directly into this field.
+      value: |
+        ```
+        Put the mclo.gs link or text here.
+        ```
+      placeholder: Please do not remove the grave accents; simply replace the line of text in the middle.
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Bug Description
+      description: |
+        Describe the unexpected behavior.
+        If you want to attach screenshots, use the comment field at the bottom of the page.
+      placeholder: |
+        Example: "Changed uuid causes tamed parrots and cats cannot be sat down."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        List the steps on how we can reproduce the issue. Make sure we can easily understand what you mean with each step.
+      placeholder: |
+        Example:
+        1. Подключиться к оффлайн серверу с LimboAuth с лицензионного клиента
+        2. Приручить кота
+        3. При правом клике кота нельзя посадить
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected Behavior
+      description: |
+        Describe what exactly you expected to happen.
+      placeholder: |
+        Example: "Кот должен сесть."
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      description: Make sure you have followed each of the steps outlined here.
+      options:
+        - label: I have included a Velocity dump.
+          required: true
+        - label: If applicable, I have included a paste (**not a screenshot**) of the error.
+          required: true
+        - label: I have tried the latest build(s) from https://modrinth.com/plugin/limboapi/ and the issue still persists.
+          required: true

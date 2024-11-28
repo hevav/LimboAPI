@@ -24,21 +24,7 @@ import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 import net.elytrium.limboapi.api.protocol.packets.data.MapData;
 
-public class MapDataPacket implements MinecraftPacket {
-
-  private final int mapID;
-  private final byte scale;
-  private final MapData mapData;
-
-  public MapDataPacket(int mapID, byte scale, MapData mapData) {
-    this.mapID = mapID;
-    this.scale = scale;
-    this.mapData = mapData;
-  }
-
-  public MapDataPacket() {
-    throw new IllegalStateException();
-  }
+public record MapDataPacket(int mapId, byte scale, MapData mapData) implements MinecraftPacket {
 
   @Override
   public void decode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
@@ -46,37 +32,37 @@ public class MapDataPacket implements MinecraftPacket {
   }
 
   @Override
-  public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion version) {
-    ProtocolUtils.writeVarInt(buf, this.mapID);
-    byte[] data = this.mapData.getData();
-    if (version.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0) {
-      buf.writeShort(data.length + 3);
-      buf.writeByte(0);
-      buf.writeByte(this.mapData.getX());
-      buf.writeByte(this.mapData.getY());
-
+  public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
+    ProtocolUtils.writeVarInt(buf, this.mapId);
+    byte[] data = this.mapData.data();
+    if (protocolVersion.noGreaterThan(ProtocolVersion.MINECRAFT_1_7_6)) {
+      buf.writeShort((1 + 1 + 1) + data.length);
+      buf.writeByte(0); // type (?)
+      buf.writeByte(this.mapData.posX());
+      buf.writeByte(this.mapData.posY());
       buf.writeBytes(data);
     } else {
       buf.writeByte(this.scale);
 
-      if (version.compareTo(ProtocolVersion.MINECRAFT_1_9) >= 0 && version.compareTo(ProtocolVersion.MINECRAFT_1_17) < 0) {
-        buf.writeBoolean(false);
+      if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_9) && protocolVersion.noGreaterThan(ProtocolVersion.MINECRAFT_1_16_4)) {
+        buf.writeBoolean(false); // trackingPosition
       }
 
-      if (version.compareTo(ProtocolVersion.MINECRAFT_1_14) >= 0) {
-        buf.writeBoolean(false);
+      if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_14)) {
+        buf.writeBoolean(false); // locked
       }
 
-      if (version.compareTo(ProtocolVersion.MINECRAFT_1_17) >= 0) {
+      // decorations (their lack, that is)
+      if (protocolVersion.noLessThan(ProtocolVersion.MINECRAFT_1_17)) {
         buf.writeBoolean(false);
       } else {
         ProtocolUtils.writeVarInt(buf, 0);
       }
 
-      buf.writeByte(this.mapData.getColumns());
-      buf.writeByte(this.mapData.getRows());
-      buf.writeByte(this.mapData.getX());
-      buf.writeByte(this.mapData.getY());
+      buf.writeByte(this.mapData.columns());
+      buf.writeByte(this.mapData.rows());
+      buf.writeByte(this.mapData.posX());
+      buf.writeByte(this.mapData.posY());
 
       ProtocolUtils.writeByteArray(buf, data);
     }
@@ -84,15 +70,6 @@ public class MapDataPacket implements MinecraftPacket {
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
-    return true;
-  }
-
-  @Override
-  public String toString() {
-    return "MapDataPacket{"
-        + "mapID=" + this.mapID
-        + ", scale=" + this.scale
-        + ", mapData=" + this.mapData
-        + "}";
+    throw new IllegalStateException();
   }
 }

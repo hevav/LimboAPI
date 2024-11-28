@@ -13,7 +13,10 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 public interface BlockStorage {
 
-  void write(Object byteBufObject, ProtocolVersion version, int pass);
+  /**
+   * @param pass Used only in 1.7-1.8 storage
+   */
+  void write(Object buf, ProtocolVersion version, int pass);
 
   void set(int posX, int posY, int posZ, @NonNull VirtualBlock block);
 

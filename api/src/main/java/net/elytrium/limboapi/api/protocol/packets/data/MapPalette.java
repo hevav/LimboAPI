@@ -23,10 +23,10 @@ import java.util.Objects;
 public class MapPalette {
 
   private static final Map<MapVersion, byte[]> REMAP_BUFFERS = new EnumMap<>(MapVersion.class);
-  private static final byte[] MAIN_BUFFER = readBuffer("/mapping/colors_main_map");
+  private static final byte[] MAIN_BUFFER = readBuffer("/mappings/colors_main_map");
 
   /**
-   * @deprecated Use {@link java.awt.Color#WHITE} instead.
+   * @deprecated Use {@link java.awt.Color#WHITE} instead
    */
   @Deprecated
   public static final byte WHITE = 34;
@@ -34,7 +34,7 @@ public class MapPalette {
 
   static {
     for (MapVersion version : MapVersion.values()) {
-      REMAP_BUFFERS.put(version, readBuffer("/mapping/colors_" + version.toString().toLowerCase(Locale.ROOT) + "_map"));
+      REMAP_BUFFERS.put(version, readBuffer("/mappings/colors_" + version.toString().toLowerCase(Locale.ROOT) + "_map"));
     }
   }
 
@@ -47,24 +47,24 @@ public class MapPalette {
   }
 
   /**
-   * Convert an Image to a byte[] using the palette.
-   * Uses reduced set of colors, to support more colors use {@link MapPalette#imageToBytes(BufferedImage, ProtocolVersion)}
+   * Convert an Image to a byte[] using the palette
+   * Uses a reduced set of colors, to support more colors use {@link MapPalette#imageToBytes(BufferedImage, ProtocolVersion)}
    *
-   * @param image The image to convert.
+   * @param image The image to convert
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static int[] imageToBytes(BufferedImage image) {
     return imageToBytes(image, ProtocolVersion.MINIMUM_VERSION);
   }
 
   /**
-   * Convert an Image to a byte[] using the palette.
+   * Convert an Image to a byte[] using the palette
    *
-   * @param image   The image to convert.
-   * @param version The ProtocolVersion to support more colors.
+   * @param image   The image to convert
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static int[] imageToBytes(BufferedImage image, ProtocolVersion version) {
     int[] result = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
@@ -72,25 +72,25 @@ public class MapPalette {
   }
 
   /**
-   * Convert an image to a byte[] using the palette.
+   * Convert an image to a byte[] using the palette
    *
-   * @param image   The image to convert.
-   * @param version The ProtocolVersion to support more colors.
+   * @param image   The image to convert
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static int[] imageToBytes(int[] image, ProtocolVersion version) {
     return imageToBytes(image, new int[image.length], version);
   }
 
   /**
-   * Convert an image to a byte[] using the palette.
+   * Convert an image to a byte[] using the palette
    *
-   * @param from    The image to convert.
-   * @param to      Output image.
-   * @param version The ProtocolVersion to support more colors.
+   * @param from    The image to convert
+   * @param to      Output image
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static int[] imageToBytes(int[] from, int[] to, ProtocolVersion version) {
     for (int i = 0; i < from.length; ++i) {
@@ -101,13 +101,13 @@ public class MapPalette {
   }
 
   /**
-   * Convert an image to a byte[] using the palette.
+   * Convert an image to a byte[] using the palette
    *
-   * @param from    The image to convert.
-   * @param to      Output image.
-   * @param version The ProtocolVersion to support more colors.
+   * @param from    The image to convert
+   * @param to      Output image
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static byte[] imageToBytes(int[] from, byte[] to, ProtocolVersion version) {
     for (int i = 0; i < from.length; ++i) {
@@ -118,23 +118,23 @@ public class MapPalette {
   }
 
   /**
-   * Get the index of the closest matching color in the palette to the given
-   * color. Uses caching and downscaling of color values.
+   * Get the index of the closest matching color in the palette to the given color
+   * Uses caching and downscaling of color values
    *
-   * @param rgb The Color to match.
+   * @param rgb The Color to match
    *
-   * @return The index in the palette.
+   * @return The index in the palette
    */
   public static byte tryFastMatchColor(int rgb, ProtocolVersion version) {
     if (getAlpha(rgb) < 128) {
       return TRANSPARENT;
     } else {
       MapVersion mapVersion = MapVersion.fromProtocolVersion(version);
-      byte originalColorID = MAIN_BUFFER[rgb & 0xFFFFFF];
+      byte originalColorId = MAIN_BUFFER[rgb & 0xFFFFFF];
       if (mapVersion == MapVersion.MAXIMUM_VERSION) {
-        return originalColorID;
+        return originalColorId;
       } else {
-        return remapByte(REMAP_BUFFERS.get(mapVersion), originalColorID);
+        return remapByte(REMAP_BUFFERS.get(mapVersion), originalColorId);
       }
     }
   }
@@ -146,10 +146,10 @@ public class MapPalette {
   /**
    * Convert an image from MapVersion.MAXIMUM_VERSION to the desired version
    *
-   * @param image   The image to convert.
-   * @param version The ProtocolVersion to support more colors.
+   * @param image   The image to convert
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static int[] convertImage(int[] image, MapVersion version) {
     return convertImage(image, new int[image.length], version);
@@ -158,11 +158,11 @@ public class MapPalette {
   /**
    * Convert an image from MapVersion.MAXIMUM_VERSION to the desired version
    *
-   * @param from    The image to convert.
-   * @param to      Output image.
-   * @param version The ProtocolVersion to support more colors.
+   * @param from    The image to convert
+   * @param to      Output image
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static int[] convertImage(int[] from, int[] to, MapVersion version) {
     byte[] remapBuffer = REMAP_BUFFERS.get(version);
@@ -176,11 +176,11 @@ public class MapPalette {
   /**
    * Convert an image from MapVersion.MAXIMUM_VERSION to the desired version
    *
-   * @param from    The image to convert.
-   * @param to      Output image.
-   * @param version The ProtocolVersion to support more colors.
+   * @param from    The image to convert
+   * @param to      Output image
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static byte[] convertImage(byte[] from, byte[] to, MapVersion version) {
     byte[] remapBuffer = REMAP_BUFFERS.get(version);
@@ -194,11 +194,11 @@ public class MapPalette {
   /**
    * Convert an image from MapVersion.MAXIMUM_VERSION to the desired version
    *
-   * @param from    The image to convert.
-   * @param to      Output image.
-   * @param version The ProtocolVersion to support more colors.
+   * @param from    The image to convert
+   * @param to      Output image
+   * @param version The ProtocolVersion to support more colors
    *
-   * @return A byte[] containing the pixels of the image.
+   * @return A byte[] containing the pixels of the image
    */
   public static byte[] convertImage(int[] from, byte[] to, MapVersion version) {
     byte[] remapBuffer = REMAP_BUFFERS.get(version);
@@ -210,7 +210,7 @@ public class MapPalette {
   }
 
   private static byte remapByte(byte[] remapBuffer, byte oldByte) {
-    return remapBuffer[Byte.toUnsignedInt(oldByte)];
+    return remapBuffer[oldByte & 0xFF];
   }
 
   public enum MapVersion {

@@ -31,6 +31,7 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.natives.compression.VelocityCompressor;
 import com.velocitypowered.natives.util.Natives;
 import com.velocitypowered.proxy.VelocityServer;
+import com.velocitypowered.proxy.config.VelocityConfiguration;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
 import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
 import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
@@ -56,7 +57,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import net.elytrium.commons.config.YamlConfig;
 import net.elytrium.commons.kyori.serialization.Serializer;
@@ -99,12 +99,10 @@ import net.elytrium.limboapi.protocol.LimboProtocol;
 import net.elytrium.limboapi.protocol.packets.PacketFactoryImpl;
 import net.elytrium.limboapi.server.CachedPackets;
 import net.elytrium.limboapi.server.LimboImpl;
-import net.elytrium.limboapi.server.item.SimpleItemComponentManager;
 import net.elytrium.limboapi.server.item.SimpleItemComponentMap;
 import net.elytrium.limboapi.server.world.SimpleBlock;
 import net.elytrium.limboapi.server.world.SimpleBlockEntity;
 import net.elytrium.limboapi.server.world.SimpleItem;
-import net.elytrium.limboapi.server.world.SimpleTagManager;
 import net.elytrium.limboapi.server.world.SimpleWorld;
 import net.elytrium.limboapi.server.world.chunk.SimpleChunk;
 import net.elytrium.limboapi.utils.ReloadListener;
@@ -118,7 +116,7 @@ import org.slf4j.Logger;
 @Plugin(
     id = "limboapi",
     name = "LimboAPI",
-    version = BuildConstants.LIMBO_VERSION,
+    version = "BuildConstants.LIMBO_VERSION", // TODO
     description = "Velocity plugin for making virtual servers.",
     url = "https://elytrium.net/",
     authors = {
@@ -130,12 +128,16 @@ public class LimboAPI implements LimboFactory {
 
   private static final int SUPPORTED_MAXIMUM_PROTOCOL_VERSION_NUMBER = 768;
 
+  // TODO translate
+  /**
+   * UUID на backend сервере может отличаться от того что хранится на клиенте, эта карта используется для обмана клиента подставляя ему тот uuid который клиент ожидает
+   */
+  private static final Map<Player, UUID> CLIENT_UUIDS = new HashMap<>();
+
   @MonotonicNonNull
   private static Logger LOGGER;
   @MonotonicNonNull
   private static Serializer SERIALIZER;
-
-  public static final ConcurrentHashMap<Player, UUID> INITIAL_ID = new ConcurrentHashMap<>();
 
   private final VelocityServer server;
   private final Metrics.Factory metricsFactory;
@@ -143,10 +145,9 @@ public class LimboAPI implements LimboFactory {
   private final Set<Player> players;
   private final CachedPackets packets;
   private final PacketFactory packetFactory;
-  private final SimpleItemComponentManager itemComponentManager = new SimpleItemComponentManager();
-  private final HashMap<Player, LoginTasksQueue> loginQueue;
-  private final HashMap<Player, Function<KickedFromServerEvent, Boolean>> kickCallback;
-  private final HashMap<Player, RegisteredServer> nextServer;
+  private final Map<Player, LoginTasksQueue> loginQueue;
+  private final Map<Player, Function<KickedFromServerEvent, Boolean>> kickCallback;
+  private final Map<Player, RegisteredServer> nextServer;
 
   private PreparedPacketFactory preparedPacketFactory;
   private PreparedPacketFactory configPreparedPacketFactory;
@@ -178,25 +179,22 @@ public class LimboAPI implements LimboFactory {
       this.server.shutdown();
       return;
     } else if (maximumProtocolVersionNumber != SUPPORTED_MAXIMUM_PROTOCOL_VERSION_NUMBER) {
-      LOGGER.warn("Current LimboAPI version doesn't support current Velocity version (protocol version numbers: supported - {}, velocity - {})",
-          SUPPORTED_MAXIMUM_PROTOCOL_VERSION_NUMBER, maximumProtocolVersionNumber);
+      LOGGER.warn(
+          "Current LimboAPI version doesn't support current Velocity version (protocol version numbers: supported - {}, velocity - {})",
+          SUPPORTED_MAXIMUM_PROTOCOL_VERSION_NUMBER, maximumProtocolVersionNumber
+      );
       LOGGER.warn("Please update LimboAPI (https://github.com/Elytrium/LimboAPI/releases). LimboAPI support: https://ely.su/discord");
     }
 
     LOGGER.info("Initializing Simple Virtual World system...");
-    SimpleBlock.init();
-    SimpleBlockEntity.init();
-    SimpleItem.init();
-    SimpleTagManager.init();
     LOGGER.info("Hooking into PlayerList/UpsertPlayerInfo and StateRegistry...");
     try {
-      LegacyPlayerListItemHook.init(this, LimboProtocol.PLAY_CLIENTBOUND_REGISTRY);
-      UpsertPlayerInfoHook.init(this, LimboProtocol.PLAY_CLIENTBOUND_REGISTRY);
-      RemovePlayerInfoHook.init(this, LimboProtocol.PLAY_CLIENTBOUND_REGISTRY);
-
+      LegacyPlayerListItemHook.init(LimboProtocol.PLAY_CLIENTBOUND_REGISTRY);
+      UpsertPlayerInfoHook.init(LimboProtocol.PLAY_CLIENTBOUND_REGISTRY);
+      RemovePlayerInfoHook.init(LimboProtocol.PLAY_CLIENTBOUND_REGISTRY);
       LimboProtocol.init();
-    } catch (Throwable e) {
-      throw new ReflectionException(e);
+    } catch (Throwable t) {
+      throw new ReflectionException(t);
     }
   }
 
@@ -207,7 +205,7 @@ public class LimboAPI implements LimboFactory {
     if (Settings.IMP.reload(this.configFile, Settings.IMP.PREFIX) == YamlConfig.LoadResult.CONFIG_NOT_EXISTS) {
       LOGGER.warn("************* FIRST LAUNCH *************");
       LOGGER.warn("Thanks for installing LimboAPI!");
-      LOGGER.warn("(C) 2021 - 2024 Elytrium");
+      LOGGER.warn("(C) 2021-2024 Elytrium");
       LOGGER.warn("");
       LOGGER.warn("Check out our plugins here: https://ely.su/github <3");
       LOGGER.warn("Discord: https://ely.su/discord");
@@ -262,17 +260,21 @@ public class LimboAPI implements LimboFactory {
     this.metricsFactory.make(this, 12530);
 
     if (Settings.IMP.MAIN.CHECK_FOR_UPDATES) {
-      if (!UpdatesChecker.checkVersionByURL("https://raw.githubusercontent.com/Elytrium/LimboAPI/master/VERSION", Settings.IMP.VERSION)) {
-        LOGGER.error("****************************************");
-        LOGGER.warn("The new LimboAPI update was found, please update.");
-        LOGGER.error("https://github.com/Elytrium/LimboAPI/releases/");
-        LOGGER.error("****************************************");
+      try {
+        if (!UpdatesChecker.checkVersionByURL("https://raw.githubusercontent.com/Elytrium/LimboAPI/master/VERSION", Settings.IMP.VERSION)) {
+          LOGGER.error("****************************************");
+          LOGGER.warn("The new LimboAPI update was found, please update.");
+          LOGGER.error("https://github.com/Elytrium/LimboAPI/releases/");
+          LOGGER.error("****************************************");
+        }
+      } catch (Exception e) {
+        LimboAPI.LOGGER.warn("Failed to check for updates", e);
       }
     }
   }
 
   @Subscribe(order = PostOrder.LAST)
-  public void postProxyInitialization(ProxyInitializeEvent event) throws IllegalAccessException {
+  public void onPostProxyInitialize(ProxyInitializeEvent event) throws Throwable {
     this.eventManagerHook.reloadHandlers();
   }
 
@@ -303,19 +305,12 @@ public class LimboAPI implements LimboFactory {
   }
 
   private void reloadVersion() {
-    if (Settings.IMP.MAIN.PREPARE_MAX_VERSION.equals("LATEST")) {
-      this.maxVersion = ProtocolVersion.MAXIMUM_VERSION;
-    } else {
-      this.maxVersion = ProtocolVersion.valueOf("MINECRAFT_" + Settings.IMP.MAIN.PREPARE_MAX_VERSION);
-    }
-
+    this.maxVersion = Settings.IMP.MAIN.PREPARE_MAX_VERSION.equals("LATEST") ? ProtocolVersion.MAXIMUM_VERSION : ProtocolVersion.valueOf("MINECRAFT_" + Settings.IMP.MAIN.PREPARE_MAX_VERSION);
     this.minVersion = ProtocolVersion.valueOf("MINECRAFT_" + Settings.IMP.MAIN.PREPARE_MIN_VERSION);
-
-    if (ProtocolVersion.MAXIMUM_VERSION.compareTo(this.maxVersion) > 0 || ProtocolVersion.MINIMUM_VERSION.compareTo(this.minVersion) < 0) {
+    if (ProtocolVersion.MAXIMUM_VERSION.greaterThan(this.maxVersion) || ProtocolVersion.MINIMUM_VERSION.lessThan(this.minVersion)) {
       LOGGER.warn(
-          "Currently working only with "
-              + this.minVersion.getVersionIntroducedIn() + " - " + this.maxVersion.getMostRecentSupportedVersion()
-              + " versions, modify the plugins/limboapi/config.yml file if you want the plugin to work with other versions."
+          "Currently working only with {} - {} versions, modify the plugins/limboapi/config.yml file if you want the plugin to work with other versions",
+          this.minVersion.getVersionIntroducedIn(), this.maxVersion.getMostRecentSupportedVersion()
       );
     }
   }
@@ -324,52 +319,44 @@ public class LimboAPI implements LimboFactory {
     int level = this.server.getConfiguration().getCompressionLevel();
     int threshold = this.server.getConfiguration().getCompressionThreshold();
     this.compressionEnabled = threshold != -1;
-
-    this.preparedPacketFactory.updateCompressor(this.compressionEnabled, level, threshold,
-        Settings.IMP.MAIN.SAVE_UNCOMPRESSED_PACKETS, Settings.IMP.MAIN.COMPATIBILITY_MODE);
-    this.configPreparedPacketFactory.updateCompressor(this.compressionEnabled, level, threshold,
-        Settings.IMP.MAIN.SAVE_UNCOMPRESSED_PACKETS, Settings.IMP.MAIN.COMPATIBILITY_MODE);
-    this.loginPreparedPacketFactory.updateCompressor(this.compressionEnabled, level, threshold,
-        Settings.IMP.MAIN.SAVE_UNCOMPRESSED_PACKETS, Settings.IMP.MAIN.COMPATIBILITY_MODE);
+    this.preparedPacketFactory.updateCompressor(this.compressionEnabled, level, threshold, Settings.IMP.MAIN.SAVE_UNCOMPRESSED_PACKETS, Settings.IMP.MAIN.COMPATIBILITY_MODE);
+    this.configPreparedPacketFactory.updateCompressor(this.compressionEnabled, level, threshold, Settings.IMP.MAIN.SAVE_UNCOMPRESSED_PACKETS, Settings.IMP.MAIN.COMPATIBILITY_MODE);
+    this.loginPreparedPacketFactory.updateCompressor(this.compressionEnabled, level, threshold, Settings.IMP.MAIN.SAVE_UNCOMPRESSED_PACKETS, Settings.IMP.MAIN.COMPATIBILITY_MODE);
   }
 
   @Override
   public VirtualBlock createSimpleBlock(Block block) {
-    return SimpleBlock.fromLegacyID((short) block.getID());
+    return SimpleBlock.fromLegacyId((short) block.getId());
   }
 
   @Override
-  public VirtualBlock createSimpleBlock(short legacyID) {
-    return SimpleBlock.fromLegacyID(legacyID);
+  public VirtualBlock createSimpleBlock(short legacyId) {
+    return SimpleBlock.fromLegacyId(legacyId);
   }
 
   @Override
-  public VirtualBlock createSimpleBlock(String modernID) {
-    return SimpleBlock.fromModernID(modernID);
+  public VirtualBlock createSimpleBlock(String modernId) {
+    return SimpleBlock.fromModernId(modernId);
   }
 
   @Override
-  public VirtualBlock createSimpleBlock(String modernID, Map<String, String> properties) {
-    return SimpleBlock.fromModernID(modernID, properties);
+  public VirtualBlock createSimpleBlock(String modernId, Map<String, String> properties) {
+    return SimpleBlock.fromModernId(modernId, properties);
   }
 
   @Override
   public VirtualBlock createSimpleBlock(short id, boolean modern) {
-    if (modern) {
-      return SimpleBlock.solid(id);
-    } else {
-      return SimpleBlock.fromLegacyID(id);
-    }
+    return modern ? SimpleBlock.solid(id) : SimpleBlock.fromLegacyId(id);
   }
 
   @Override
-  public VirtualBlock createSimpleBlock(boolean solid, boolean air, boolean motionBlocking, short id) {
-    return new SimpleBlock(solid, air, motionBlocking, id);
+  public VirtualBlock createSimpleBlock(short blockStateId, boolean air, boolean solid, boolean motionBlocking) {
+    return new SimpleBlock(blockStateId, air, solid, motionBlocking);
   }
 
   @Override
-  public VirtualBlock createSimpleBlock(boolean solid, boolean air, boolean motionBlocking, String modernID, Map<String, String> properties) {
-    return new SimpleBlock(solid, air, motionBlocking, modernID, properties);
+  public VirtualBlock createSimpleBlock(String modernId, Map<String, String> properties, boolean air, boolean solid, boolean motionBlocking) {
+    return new SimpleBlock(modernId, properties, air, solid, motionBlocking);
   }
 
   @Override
@@ -432,8 +419,7 @@ public class LimboAPI implements LimboFactory {
 
   public void inject3rdParty(Player player, MinecraftConnection connection, ChannelPipeline pipeline) {
     StateRegistry state = connection.getState();
-    if (connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) < 0
-        || (state != StateRegistry.CONFIG && state != StateRegistry.LOGIN)) {
+    if (connection.getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2) || (state != StateRegistry.CONFIG && state != StateRegistry.LOGIN)) {
       this.preparedPacketFactory.inject(player, connection, pipeline);
     } else {
       this.configPreparedPacketFactory.inject(player, connection, pipeline);
@@ -445,32 +431,28 @@ public class LimboAPI implements LimboFactory {
     this.setEncoderState(connection, stateRegistry);
   }
 
-  public void setActiveSessionHandler(MinecraftConnection connection, StateRegistry stateRegistry,
-                                      MinecraftSessionHandler sessionHandler) {
+  public void setActiveSessionHandler(MinecraftConnection connection, StateRegistry stateRegistry, MinecraftSessionHandler sessionHandler) {
     connection.setActiveSessionHandler(stateRegistry, sessionHandler);
     this.setEncoderState(connection, stateRegistry);
   }
 
   public void setEncoderState(MinecraftConnection connection, StateRegistry state) {
     // As CONFIG state was added in 1.20.2, no need to track it for lower versions
-    if (connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) < 0) {
+    if (connection.getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
       return;
     }
 
+    var pipeline = connection.getChannel().pipeline();
     if (Settings.IMP.MAIN.COMPATIBILITY_MODE) {
-      MinecraftEncoder encoder = connection.getChannel().pipeline().get(MinecraftEncoder.class);
+      MinecraftEncoder encoder = pipeline.get(MinecraftEncoder.class);
       if (encoder != null) {
         encoder.setState(state);
       }
     }
 
-    PreparedPacketEncoder encoder = connection.getChannel().pipeline().get(PreparedPacketEncoder.class);
+    PreparedPacketEncoder encoder = pipeline.get(PreparedPacketEncoder.class);
     if (encoder != null) {
-      if (state != StateRegistry.CONFIG && state != StateRegistry.LOGIN) {
-        encoder.setFactory(this.preparedPacketFactory);
-      } else {
-        encoder.setFactory(this.configPreparedPacketFactory);
-      }
+      encoder.setFactory(state == StateRegistry.CONFIG || state == StateRegistry.LOGIN ? this.configPreparedPacketFactory : this.preparedPacketFactory);
     }
   }
 
@@ -479,17 +461,9 @@ public class LimboAPI implements LimboFactory {
   }
 
   public void fixDecompressor(ChannelPipeline pipeline, int threshold, boolean onLogin) {
-    ChannelHandler decoder;
-    if (onLogin && Settings.IMP.MAIN.DISCARD_COMPRESSION_ON_LOGIN) {
-      decoder = new MinecraftDiscardCompressDecoder();
-    } else if (!onLogin && Settings.IMP.MAIN.DISCARD_COMPRESSION_AFTER_LOGIN) {
-      decoder = new MinecraftDiscardCompressDecoder();
-    } else {
-      int level = this.server.getConfiguration().getCompressionLevel();
-      VelocityCompressor compressor = Natives.compress.get().create(level);
-      decoder = new MinecraftLimitedCompressDecoder(threshold, compressor);
-    }
-
+    ChannelHandler decoder = onLogin && Settings.IMP.MAIN.DISCARD_COMPRESSION_ON_LOGIN || !onLogin && Settings.IMP.MAIN.DISCARD_COMPRESSION_AFTER_LOGIN
+        ? new MinecraftDiscardCompressDecoder()
+        : new MinecraftLimitedCompressDecoder(threshold, Natives.compress.get().create(this.server.getConfiguration().getCompressionLevel()));
     if (Settings.IMP.MAIN.COMPATIBILITY_MODE && pipeline.context(Connections.COMPRESSION_DECODER) != null) {
       pipeline.replace(Connections.COMPRESSION_DECODER, Connections.COMPRESSION_DECODER, decoder);
     } else {
@@ -504,9 +478,9 @@ public class LimboAPI implements LimboFactory {
         pipeline.addBefore(Connections.MINECRAFT_DECODER, Connections.FRAME_ENCODER, MinecraftVarintLengthEncoder.INSTANCE);
       }
     } else {
-      int level = this.server.getConfiguration().getCompressionLevel();
-      int compressionThreshold = this.server.getConfiguration().getCompressionThreshold();
-      VelocityCompressor compressor = Natives.compress.get().create(level);
+      VelocityConfiguration configuration = this.server.getConfiguration();
+      int compressionThreshold = configuration.getCompressionThreshold();
+      VelocityCompressor compressor = Natives.compress.get().create(configuration.getCompressionLevel());
       if (!Settings.IMP.MAIN.COMPATIBILITY_MODE) {
         MinecraftCompressorAndLengthEncoder encoder = new MinecraftCompressorAndLengthEncoder(compressionThreshold, compressor);
         pipeline.remove(compressionHandler);
@@ -535,23 +509,28 @@ public class LimboAPI implements LimboFactory {
   }
 
   @Override
-  public VirtualItem getItem(String itemID) {
-    return SimpleItem.fromModernID(itemID);
+  public VirtualItem getItem(String modernId) {
+    return SimpleItem.fromModernId(modernId);
   }
 
   @Override
-  public VirtualItem getLegacyItem(int itemLegacyID) {
-    return SimpleItem.fromLegacyID(itemLegacyID);
+  public VirtualItem getLegacyItem(int legacyId) {
+    return SimpleItem.fromLegacyId(legacyId);
   }
 
   @Override
   public ItemComponentMap createItemComponentMap() {
-    return new SimpleItemComponentMap(this.itemComponentManager);
+    return new SimpleItemComponentMap();
   }
 
   @Override
-  public VirtualBlockEntity getBlockEntity(String entityID) {
-    return SimpleBlockEntity.fromModernID(entityID);
+  public VirtualBlockEntity getBlockEntityFromModernId(String modernId) {
+    return SimpleBlockEntity.fromModernId(modernId);
+  }
+
+  @Override
+  public VirtualBlockEntity getBlockEntityFromLegacyId(String legacyId) {
+    return SimpleBlockEntity.fromLegacyId(legacyId);
   }
 
   @Override
@@ -627,18 +606,6 @@ public class LimboAPI implements LimboFactory {
     return this.nextServer.get(player);
   }
 
-  public void setInitialID(Player player, UUID nextServer) {
-    INITIAL_ID.put(player, nextServer);
-  }
-
-  public void removeInitialID(Player player) {
-    INITIAL_ID.remove(player);
-  }
-
-  public UUID getInitialID(Player player) {
-    return INITIAL_ID.get(player);
-  }
-
   public LoginListener getLoginListener() {
     return this.loginListener;
   }
@@ -676,6 +643,28 @@ public class LimboAPI implements LimboFactory {
   @Override
   public WorldFile openWorldFile(BuiltInWorldFileType apiType, CompoundBinaryTag tag) {
     return WorldFileTypeRegistry.fromApiType(apiType, tag);
+  }
+
+  public static void setClientUniqueId(Player player, UUID clientUniqueId) {
+    LimboAPI.CLIENT_UUIDS.put(player, clientUniqueId);
+  }
+
+  public static void removeClientUniqueId(Player player) {
+    LimboAPI.CLIENT_UUIDS.remove(player);
+  }
+
+  public static UUID getClientUniqueId(Player player) {
+    return LimboAPI.CLIENT_UUIDS.get(player);
+  }
+
+  public static UUID getClientUniqueId(UUID serverSideUniqueId) {
+    for (var entry : LimboAPI.CLIENT_UUIDS.entrySet()) {
+      if (entry.getKey().getUniqueId().equals(serverSideUniqueId)) {
+        return entry.getValue();
+      }
+    }
+
+    return serverSideUniqueId;
   }
 
   private static void setLogger(Logger logger) {

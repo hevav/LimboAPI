@@ -27,8 +27,6 @@ import com.velocitypowered.proxy.protocol.StateRegistry;
 import com.velocitypowered.proxy.protocol.packet.RemovePlayerInfoPacket;
 import io.netty.util.collection.IntObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,20 +38,12 @@ import net.elytrium.limboapi.protocol.LimboProtocol;
 @SuppressWarnings("unchecked")
 public class RemovePlayerInfoHook extends RemovePlayerInfoPacket {
 
-  private static final MethodHandle SERVER_CONN_FIELD;
-
-  private final LimboAPI plugin;
-
-  private RemovePlayerInfoHook(LimboAPI plugin) {
-    this.plugin = plugin;
-  }
-
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
     if (handler instanceof BackendPlaySessionHandler) {
       try {
-        ConnectedPlayer player = ((VelocityServerConnection) SERVER_CONN_FIELD.invokeExact((BackendPlaySessionHandler) handler)).getPlayer();
-        UUID initialID = this.plugin.getInitialID(player);
+        ConnectedPlayer player = ((VelocityServerConnection) UpsertPlayerInfoHook.SERVER_CONN_FIELD.invokeExact((BackendPlaySessionHandler) handler)).getPlayer();
+        UUID initialID = LimboAPI.getClientUniqueId(player);
         if (this.getProfilesToRemove() instanceof List<UUID> uuids) {
           for (int i = 0; i < uuids.size(); i++) {
             if (player.getUniqueId().equals(uuids.get(i))) {
@@ -61,25 +51,15 @@ public class RemovePlayerInfoHook extends RemovePlayerInfoPacket {
             }
           }
         }
-      } catch (Throwable e) {
-        throw new ReflectionException(e);
+      } catch (Throwable t) {
+        throw new ReflectionException(t);
       }
     }
 
     return super.handle(handler);
   }
 
-  static {
-    try {
-      SERVER_CONN_FIELD = MethodHandles.privateLookupIn(BackendPlaySessionHandler.class, MethodHandles.lookup())
-          .findGetter(BackendPlaySessionHandler.class, "serverConn", VelocityServerConnection.class);
-    } catch (NoSuchFieldException | IllegalAccessException e) {
-      throw new ReflectionException(e);
-    }
-  }
-
-  public static void init(LimboAPI plugin, StateRegistry.PacketRegistry registry) throws ReflectiveOperationException {
-    // See LimboProtocol#overlayRegistry about var.
+  public static void init(StateRegistry.PacketRegistry registry) throws ReflectiveOperationException {
     var playProtocolRegistryVersions = (Map<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry>) LimboProtocol.VERSIONS_FIELD.get(registry);
     playProtocolRegistryVersions.forEach((protocolVersion, protocolRegistry) -> {
       try {
@@ -88,7 +68,7 @@ public class RemovePlayerInfoHook extends RemovePlayerInfoPacket {
 
         int id = packetClassToID.getInt(RemovePlayerInfoPacket.class);
         packetClassToID.put(RemovePlayerInfoHook.class, id);
-        packetIDToSupplier.put(id, () -> new RemovePlayerInfoHook(plugin));
+        packetIDToSupplier.put(id, RemovePlayerInfoHook::new);
       } catch (ReflectiveOperationException e) {
         throw new ReflectionException(e);
       }

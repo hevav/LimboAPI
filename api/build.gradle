@@ -1,52 +1,43 @@
-//file:noinspection GroovyAssignabilityCheck
+//file:noinspection VulnerableLibrariesLocal
 
 plugins {
-  id("java-library")
   id("maven-publish")
 }
 
-compileJava() {
-  getOptions().getRelease().set(17)
-  getOptions().setEncoding("UTF-8")
+java() {
+  withSourcesJar()
+  withJavadocJar()
 }
 
 dependencies() {
-  compileOnly("com.velocitypowered:velocity-api:$velocityVersion")
-  api("net.elytrium.commons:config:$elytriumCommonsVersion")
-  api("net.elytrium.commons:utils:$elytriumCommonsVersion")
-  api("net.elytrium.commons:velocity:$elytriumCommonsVersion")
-  api("net.elytrium.commons:kyori:$elytriumCommonsVersion")
-  api("net.kyori:adventure-nbt:$adventureVersion")
+  api(libs.velocity.api)
+  api("net.kyori:adventure-nbt:4.16.0")
 
-  compileOnly("com.github.spotbugs:spotbugs-annotations:$spotbugsVersion")
+  compileOnly("net.elytrium.commons:config:1.2.3")
+  shadowApi("net.elytrium.commons:utils:1.2.3")
+  shadowApi("net.elytrium.commons:velocity:1.2.3")
+  shadowApi("net.elytrium.commons:kyori:1.2.3")
+
+  compileOnly("com.github.spotbugs:spotbugs-annotations:4.7.3")
 }
 
-license() {
-  matching(includes: ["**/mcprotocollib/**"]) {
-    header = rootProject.file("HEADER_MCPROTOCOLLIB.txt")
-  }
-
-  header = file("HEADER.txt")
-}
+//spotless() {
+//  //matching(includes: ["**/mcprotocollib/**"]) {
+//  //  header = rootProject.file("HEADER_MCPROTOCOLLIB.txt")
+//  //}
+//
+//  java() {
+//    licenseHeaderFile(file("HEADER.txt"))
+//  }
+//}
 
 javadoc() {
+  def options = options as StandardJavadocDocletOptions
   options.setEncoding("UTF-8")
   options.setSource("17")
-  options.links("https://docs.oracle.com/en/java/javase/11/docs/api/")
   options.addStringOption("Xdoclint:none", "-quiet")
-  if (JavaVersion.current() >= JavaVersion.VERSION_1_9 && JavaVersion.current() < JavaVersion.VERSION_12) {
-    options.addBooleanOption("-no-module-directories", true)
-  }
-}
-
-tasks.register("sourcesJar", Jar) {
-  archiveClassifier = "sources"
-  from(sourceSets.main.getAllSource())
-}
-
-tasks.register("javadocJar", Jar) {
-  archiveClassifier = "javadoc"
-  from(javadoc)
+  options.getLinks().addAll("https://docs.oracle.com/en/java/javase/17/docs/api/", "https://jd.papermc.io/velocity/3.3.0/", "https://jd.advntr.dev/nbt/4.16.0/")
+  options.tags("sinceMinecraft:a:Since Minecraft:")
 }
 
 publishing() {
@@ -57,33 +48,13 @@ publishing() {
         setPassword(System.getenv("ELYTRIUM_MAVEN_PASSWORD"))
       }
 
-      setName("elytrium-repo")
-      setUrl("https://maven.elytrium.net/repo/")
+      name = "elytrium"
+      url = "https://maven.elytrium.net/repo/"
     }
   }
 
-  publications.create("publication", MavenPublication) {
+  publications.create("maven", MavenPublication) {
+    // TODO pom
     from(components.java)
-
-    artifact(javadocJar)
-    artifact(sourcesJar)
   }
 }
-
-artifacts() {
-  archives(javadocJar)
-  archives(sourcesJar)
-}
-
-sourceSets.main.java.srcDir(
-    getTasks().register("generateTemplates", Copy) {
-      task -> {
-        String version = getVersion().contains("-") ? "${getVersion()} (git-${getCurrentShortRevision()})" : getVersion()
-        task.getInputs().properties("version": version)
-        task.from(file("src/main/templates")).into(getLayout().getBuildDirectory().dir("generated/sources/templates"))
-        task.expand("version": version)
-      }
-    }.map {
-      it.getOutputs()
-    }
-)

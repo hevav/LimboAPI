@@ -29,7 +29,6 @@ import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import io.netty.util.collection.IntObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,65 +36,48 @@ import java.util.function.Supplier;
 import net.elytrium.commons.utils.reflection.ReflectionException;
 import net.elytrium.limboapi.LimboAPI;
 import net.elytrium.limboapi.protocol.LimboProtocol;
+import net.elytrium.limboapi.utils.Reflection;
 
 @SuppressWarnings("unchecked")
 public class UpsertPlayerInfoHook extends UpsertPlayerInfoPacket {
 
-  private static final MethodHandle SERVER_CONN_FIELD;
-
-  private final LimboAPI plugin;
-
-  private UpsertPlayerInfoHook(LimboAPI plugin) {
-    this.plugin = plugin;
-  }
+  static final MethodHandle SERVER_CONN_FIELD = Reflection.findGetter(BackendPlaySessionHandler.class, "serverConn", VelocityServerConnection.class);
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
     if (handler instanceof BackendPlaySessionHandler) {
       try {
         ConnectedPlayer player = ((VelocityServerConnection) SERVER_CONN_FIELD.invokeExact((BackendPlaySessionHandler) handler)).getPlayer();
-        UUID initialID = this.plugin.getInitialID(player);
+        UUID initialId = LimboAPI.getClientUniqueId(player);
         List<Entry> items = this.getEntries();
-
         for (int i = 0; i < items.size(); ++i) {
           Entry item = items.get(i);
-
           if (player.getUniqueId().equals(item.getProfileId())) {
-            Entry fixedEntry = new Entry(initialID);
-            fixedEntry.setDisplayName(item.getDisplayName());
-            fixedEntry.setGameMode(item.getGameMode());
-            fixedEntry.setLatency(item.getLatency());
-            fixedEntry.setDisplayName(item.getDisplayName());
-            if (item.getProfile() != null && item.getProfile().getId().equals(player.getUniqueId())) {
-              fixedEntry.setProfile(new GameProfile(initialID, item.getProfile().getName(), item.getProfile().getProperties()));
-            } else {
-              fixedEntry.setProfile(item.getProfile());
-            }
-            fixedEntry.setListed(item.isListed());
-            fixedEntry.setChatSession(item.getChatSession());
-
-            items.set(i, fixedEntry);
+            items.set(i, UpsertPlayerInfoHook.createFixedEntry(initialId, item, player));
           }
         }
-      } catch (Throwable e) {
-        throw new ReflectionException(e);
+      } catch (Throwable t) {
+        throw new ReflectionException(t);
       }
     }
 
     return super.handle(handler);
   }
 
-  static {
-    try {
-      SERVER_CONN_FIELD = MethodHandles.privateLookupIn(BackendPlaySessionHandler.class, MethodHandles.lookup())
-          .findGetter(BackendPlaySessionHandler.class, "serverConn", VelocityServerConnection.class);
-    } catch (NoSuchFieldException | IllegalAccessException e) {
-      throw new ReflectionException(e);
-    }
+  private static Entry createFixedEntry(UUID initialId, Entry item, ConnectedPlayer player) {
+    Entry fixedEntry = new Entry(initialId);
+    GameProfile profile = item.getProfile();
+    fixedEntry.setProfile(profile == null || !profile.getId().equals(player.getUniqueId()) ? profile : new GameProfile(initialId, profile.getName(), profile.getProperties()));
+    fixedEntry.setListed(item.isListed());
+    fixedEntry.setLatency(item.getLatency());
+    fixedEntry.setGameMode(item.getGameMode());
+    fixedEntry.setDisplayName(item.getDisplayName());
+    fixedEntry.setListOrder(item.getListOrder());
+    fixedEntry.setChatSession(item.getChatSession());
+    return fixedEntry;
   }
 
-  public static void init(LimboAPI plugin, StateRegistry.PacketRegistry registry) throws ReflectiveOperationException {
-    // See LimboProtocol#overlayRegistry about var.
+  public static void init(StateRegistry.PacketRegistry registry) throws ReflectiveOperationException {
     var playProtocolRegistryVersions = (Map<ProtocolVersion, StateRegistry.PacketRegistry.ProtocolRegistry>) LimboProtocol.VERSIONS_FIELD.get(registry);
     playProtocolRegistryVersions.forEach((protocolVersion, protocolRegistry) -> {
       try {
@@ -104,7 +86,7 @@ public class UpsertPlayerInfoHook extends UpsertPlayerInfoPacket {
 
         int id = packetClassToID.getInt(UpsertPlayerInfoPacket.class);
         packetClassToID.put(UpsertPlayerInfoHook.class, id);
-        packetIDToSupplier.put(id, () -> new UpsertPlayerInfoHook(plugin));
+        packetIDToSupplier.put(id, UpsertPlayerInfoHook::new);
       } catch (ReflectiveOperationException e) {
         throw new ReflectionException(e);
       }

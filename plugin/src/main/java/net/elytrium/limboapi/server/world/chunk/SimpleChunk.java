@@ -24,6 +24,7 @@ import net.elytrium.limboapi.api.chunk.VirtualBiome;
 import net.elytrium.limboapi.api.chunk.VirtualBlock;
 import net.elytrium.limboapi.api.chunk.VirtualBlockEntity;
 import net.elytrium.limboapi.api.chunk.VirtualChunk;
+import net.elytrium.limboapi.api.chunk.data.BlockSection;
 import net.elytrium.limboapi.api.chunk.data.ChunkSnapshot;
 import net.elytrium.limboapi.api.chunk.data.LightSection;
 import net.elytrium.limboapi.material.Biome;
@@ -63,17 +64,15 @@ public class SimpleChunk implements VirtualChunk {
 
   @Override
   public void setBlock(int posX, int posY, int posZ, @Nullable VirtualBlock block) {
-    this.getSection(posY).setBlockAt(posX, posY & 15, posZ, block);
+    this.getSection(posY).setBlockAt(posX, posY & 0x0F, posZ, block);
   }
 
   @Override
   public void setBlockEntity(int posX, int posY, int posZ, @Nullable CompoundBinaryTag nbt, @Nullable VirtualBlockEntity blockEntity) {
-    if (blockEntity == null) {
-      this.blockEntityEntries.removeIf(entry -> entry.getPosX() == posX && entry.getPosY() == posY && entry.getPosZ() == posZ);
-      return;
+    this.blockEntityEntries.removeIf(entry -> entry.getPosX() == posX && entry.getPosY() == posY && entry.getPosZ() == posZ);
+    if (blockEntity != null) {
+      this.blockEntityEntries.add(blockEntity.createEntry(this, posX, posY, posZ, nbt));
     }
-
-    this.blockEntityEntries.add(blockEntity.getEntry(posX, posY, posZ, nbt));
   }
 
   @Override
@@ -96,11 +95,7 @@ public class SimpleChunk implements VirtualChunk {
   @Override
   public VirtualBlock getBlock(int posX, int posY, int posZ) {
     SimpleSection section = this.sections[getSectionIndex(posY)];
-    if (section == null) {
-      return SimpleBlock.AIR;
-    } else {
-      return section.getBlockAt(posX, posY & 15, posZ);
-    }
+    return section == null ? SimpleBlock.AIR : section.getBlockAt(posX, posY & 0x0F, posZ);
   }
 
   @Override
@@ -123,22 +118,22 @@ public class SimpleChunk implements VirtualChunk {
 
   @Override
   public void setBlockLight(int posX, int posY, int posZ, byte light) {
-    this.getLightSection(posY).setBlockLight(posX, posY & 15, posZ, light);
+    this.getLightSection(posY).setBlockLight(posX, posY & 0x0F, posZ, light);
   }
 
   @Override
   public byte getBlockLight(int posX, int posY, int posZ) {
-    return this.getLightSection(posY).getBlockLight(posX, posY & 15, posZ);
+    return this.getLightSection(posY).getBlockLight(posX, posY & 0x0F, posZ);
   }
 
   @Override
   public void setSkyLight(int posX, int posY, int posZ, byte light) {
-    this.getLightSection(posY).setSkyLight(posX, posY & 15, posZ, light);
+    this.getLightSection(posY).setSkyLight(posX, posY & 0x0F, posZ, light);
   }
 
   @Override
   public byte getSkyLight(int posX, int posY, int posZ) {
-    return this.getLightSection(posY).getSkyLight(posX, posY & 15, posZ);
+    return this.getLightSection(posY).getSkyLight(posX, posY & 0x0F, posZ);
   }
 
   private LightSection getLightSection(int posY) {
@@ -170,36 +165,35 @@ public class SimpleChunk implements VirtualChunk {
   }
 
   @Override
-  public ChunkSnapshot getFullChunkSnapshot() {
-    return this.createSnapshot(true, 0);
+  public ChunkSnapshot createSnapshot(boolean full) {
+    return new SimpleChunkSnapshot(this.posX, this.posZ, full, this.createBlockSectionSnapshot(), this.createLightSnapshot(), this.biomes.clone(), this.blockEntityEntries.toArray(VirtualBlockEntity.Entry[]::new));
   }
 
   @Override
-  public ChunkSnapshot getPartialChunkSnapshot(long previousUpdate) {
-    return this.createSnapshot(false, previousUpdate);
+  public BlockSection[] createBlockSectionSnapshot() {
+    SimpleSection[] snapshot = new SimpleSection[this.sections.length];
+    for (int i = 0; i < snapshot.length; ++i) {
+      SimpleSection section = this.sections[i];
+      if (section != null) {
+        snapshot[i] = section.copy();
+      }
+    }
+
+    return snapshot;
   }
 
-  private ChunkSnapshot createSnapshot(boolean full, long previousUpdate) {
-    SimpleSection[] sectionsSnapshot = new SimpleSection[this.sections.length];
-    for (int i = 0; i < this.sections.length; ++i) {
-      if (this.sections[i] != null && this.sections[i].getLastUpdate() > previousUpdate) {
-        sectionsSnapshot[i] = this.sections[i].getSnapshot();
-      }
+  @Override
+  public LightSection[] createLightSnapshot() {
+    LightSection[] snapshot = new LightSection[this.light.length];
+    for (int i = 0; i < snapshot.length; ++i) {
+      snapshot[i] = this.light[i].copy();
     }
 
-    LightSection[] lightSnapshot = new LightSection[this.light.length];
-    for (int i = 0; i < lightSnapshot.length; ++i) {
-      if (this.light[i].getLastUpdate() > previousUpdate) {
-        lightSnapshot[i] = this.light[i].copy();
-      }
-    }
-
-    return new SimpleChunkSnapshot(this.posX, this.posZ, full, sectionsSnapshot, lightSnapshot,
-        Arrays.copyOf(this.biomes, this.biomes.length), List.copyOf(this.blockEntityEntries));
+    return snapshot;
   }
 
   private static int getBiomeIndex(int posX, int posY, int posZ) {
-    return (posY >> 2 & 63) << 4 | (posZ >> 2 & 3) << 2 | posX >> 2 & 3;
+    return (posY >> 2 & 0b0000111111) << 4 | (posZ >> 2 & 0b11) << 2 | posX >> 2 & 0b11;
   }
 
   private static int getSectionIndex(int posY) {

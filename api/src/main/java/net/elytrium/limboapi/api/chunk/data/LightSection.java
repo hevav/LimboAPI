@@ -23,7 +23,10 @@ public interface LightSection {
 
   byte getSkyLight(int posX, int posY, int posZ);
 
-  long getLastUpdate();
+  @Deprecated(forRemoval = true)
+  default long getLastUpdate() {
+    return 0;
+  }
 
   LightSection copy();
 }

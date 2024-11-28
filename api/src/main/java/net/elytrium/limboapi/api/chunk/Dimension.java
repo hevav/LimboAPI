@@ -14,18 +14,18 @@ public enum Dimension {
   THE_END("minecraft:the_end", 1, 2, 16, false, BuiltInBiome.THE_END); // 256 / 16
 
   private final String key;
-  private final int legacyID;
-  private final int modernID;
+  private final int legacyId;
+  private final int modernId;
   private final int maxSections;
-  private final boolean hasLegacySkyLight;
+  private final boolean hasSkyLight;
   private final BuiltInBiome defaultBiome;
 
-  Dimension(String key, int legacyID, int modernID, int maxSections, boolean hasLegacySkyLight, BuiltInBiome defaultBiome) {
+  Dimension(String key, int legacyId, int modernId, int maxSections, boolean hasSkyLight, BuiltInBiome defaultBiome) {
     this.key = key;
-    this.legacyID = legacyID;
-    this.modernID = modernID;
+    this.legacyId = legacyId;
+    this.modernId = modernId;
     this.maxSections = maxSections;
-    this.hasLegacySkyLight = hasLegacySkyLight;
+    this.hasSkyLight = hasSkyLight;
     this.defaultBiome = defaultBiome;
   }
 
@@ -33,20 +33,35 @@ public enum Dimension {
     return this.key;
   }
 
+  @Deprecated(forRemoval = true)
   public int getLegacyID() {
-    return this.legacyID;
+    return this.legacyId;
   }
 
+  public int getLegacyId() {
+    return this.legacyId;
+  }
+
+  @Deprecated(forRemoval = true)
   public int getModernID() {
-    return this.modernID;
+    return this.modernId;
+  }
+
+  public int getModernId() {
+    return this.modernId;
   }
 
   public int getMaxSections() {
     return this.maxSections;
   }
 
+  @Deprecated(forRemoval = true)
   public boolean hasLegacySkyLight() {
-    return this.hasLegacySkyLight;
+    return this.hasSkyLight;
+  }
+
+  public boolean hasSkyLight() {
+    return this.hasSkyLight;
   }
 
   public BuiltInBiome getDefaultBiome() {

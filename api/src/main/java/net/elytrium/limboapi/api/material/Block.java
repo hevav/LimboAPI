@@ -270,7 +270,12 @@ public enum Block {
     this.id = id;
   }
 
+  @Deprecated(forRemoval = true)
   public int getID() {
+    return this.getId();
+  }
+
+  public int getId() {
     return this.id;
   }
 }

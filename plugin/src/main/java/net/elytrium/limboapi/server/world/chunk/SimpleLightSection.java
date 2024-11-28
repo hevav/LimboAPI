@@ -28,16 +28,14 @@ public class SimpleLightSection implements LightSection {
 
   private NibbleArray3D blockLight;
   private NibbleArray3D skyLight;
-  private long lastUpdate;
 
   public SimpleLightSection() {
-    this(NO_LIGHT, ALL_LIGHT, System.nanoTime());
+    this(NO_LIGHT, ALL_LIGHT);
   }
 
-  private SimpleLightSection(NibbleArray3D blockLight, NibbleArray3D skyLight, long lastUpdate) {
+  private SimpleLightSection(NibbleArray3D blockLight, NibbleArray3D skyLight) {
     this.blockLight = blockLight;
     this.skyLight = skyLight;
-    this.lastUpdate = lastUpdate;
   }
 
   @Override
@@ -50,7 +48,6 @@ public class SimpleLightSection implements LightSection {
     }
 
     this.blockLight.set(posX, posY, posZ, light);
-    this.lastUpdate = System.nanoTime();
   }
 
   @Override
@@ -74,7 +71,6 @@ public class SimpleLightSection implements LightSection {
     }
 
     this.skyLight.set(posX, posY, posZ, light);
-    this.lastUpdate = System.nanoTime();
   }
 
   @Override
@@ -99,14 +95,9 @@ public class SimpleLightSection implements LightSection {
   }
 
   @Override
-  public long getLastUpdate() {
-    return this.lastUpdate;
-  }
-
-  @Override
   public SimpleLightSection copy() {
     NibbleArray3D skyLight = this.skyLight == ALL_LIGHT ? ALL_LIGHT : this.skyLight.copy();
     NibbleArray3D blockLight = this.blockLight == NO_LIGHT ? NO_LIGHT : this.blockLight.copy();
-    return new SimpleLightSection(blockLight, skyLight, this.lastUpdate);
+    return new SimpleLightSection(blockLight, skyLight);
   }
 }

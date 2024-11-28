@@ -1,0 +1,9 @@
+# Borrowed from ViaVersion
+blank_issues_enabled: false
+contact_links:
+  - name: Dev builds
+    url: https://modrinth.com/plugin/limboapi/
+    about: Before reporting a bug, please check if using master/dev builds from our modrinth page fixes your issue.
+  - name: Discord
+    url: https://discord.gg/sxVzYv2dbR
+    about: For smaller issues or questions, you can also join our Discord server.

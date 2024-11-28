@@ -26,28 +26,25 @@ import java.util.List;
 import java.util.Map;
 import net.elytrium.limboapi.api.chunk.VirtualBiome;
 import net.elytrium.limboapi.api.chunk.util.CompactStorage;
-import net.elytrium.limboapi.material.Biome;
 import net.elytrium.limboapi.mcprotocollib.BitStorage116;
+import net.elytrium.limboapi.protocol.util.LimboProtocolUtils;
 import net.elytrium.limboapi.server.world.chunk.SimpleChunk;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 public class BiomeStorage118 {
 
+  private static final int MIN_BITS_PER_ENTRY = 1;
+  private static final int MAX_BITS_PER_ENTRY = 3;
+
   private final ProtocolVersion version;
 
-  private List<VirtualBiome> palette = new ArrayList<>();
-  private Map<Integer, VirtualBiome> rawToBiome = new HashMap<>();
+  private List<VirtualBiome> palette = new ArrayList<>(4);
+  private Map<Integer, VirtualBiome> rawToBiome = new HashMap<>(4);
   private CompactStorage storage;
 
   public BiomeStorage118(ProtocolVersion version) {
     this.version = version;
-
-    for (Biome biome : Biome.values()) {
-      this.palette.add(biome);
-      this.rawToBiome.put(biome.getID(), biome);
-    }
-
-    this.storage = new BitStorage116(3, SimpleChunk.MAX_BIOMES_PER_SECTION);
+    this.storage = new BitStorage116(BiomeStorage118.MIN_BITS_PER_ENTRY, SimpleChunk.MAX_BIOMES_PER_SECTION);
   }
 
   private BiomeStorage118(ProtocolVersion version, List<VirtualBiome> palette, Map<Integer, VirtualBiome> rawToBiome, CompactStorage storage) {
@@ -58,12 +55,12 @@ public class BiomeStorage118 {
   }
 
   public void set(int posX, int posY, int posZ, @NonNull VirtualBiome biome) {
-    int id = this.getIndex(biome);
+    int id = this.getId(biome);
     this.storage.set(index(posX, posY, posZ), id);
   }
 
   public void set(int index, @NonNull VirtualBiome biome) {
-    int id = this.getIndex(biome);
+    int id = this.getId(biome);
     this.storage.set(index, id);
   }
 
@@ -74,20 +71,14 @@ public class BiomeStorage118 {
 
   private VirtualBiome get(int index) {
     int id = this.storage.get(index);
-    if (this.storage.getBitsPerEntry() > 8) {
-      return this.rawToBiome.get(id);
-    } else {
-      return this.palette.get(id);
-    }
+    return this.storage.getBitsPerEntry() > BiomeStorage118.MAX_BITS_PER_ENTRY ? this.rawToBiome.get(id) : this.palette.get(id);
   }
 
   public void write(ByteBuf buf, ProtocolVersion version) {
-    buf.writeByte(this.storage.getBitsPerEntry());
-    if (this.storage.getBitsPerEntry() <= 8) {
-      ProtocolUtils.writeVarInt(buf, this.palette.size());
-      for (VirtualBiome biome : this.palette) {
-        ProtocolUtils.writeVarInt(buf, biome.getID());
-      }
+    int bitsPerEntry = this.storage.getBitsPerEntry();
+    buf.writeByte(bitsPerEntry);
+    if (bitsPerEntry != BiomeStorage118.MAX_BITS_PER_ENTRY) {
+      LimboProtocolUtils.writeCollection(buf, this.palette, biome -> ProtocolUtils.writeVarInt(buf, biome.getId()));
     }
 
     this.storage.write(buf, version);
@@ -95,10 +86,10 @@ public class BiomeStorage118 {
 
   public int getDataLength() {
     int length = 1;
-    if (this.storage.getBitsPerEntry() <= 8) {
+    if (this.storage.getBitsPerEntry() != BiomeStorage118.MAX_BITS_PER_ENTRY) {
       length += ProtocolUtils.varIntBytes(this.palette.size());
       for (VirtualBiome biome : this.palette) {
-        length += ProtocolUtils.varIntBytes(biome.getID());
+        length += ProtocolUtils.varIntBytes(biome.getId());
       }
     }
 
@@ -109,9 +100,9 @@ public class BiomeStorage118 {
     return new BiomeStorage118(this.version, new ArrayList<>(this.palette), new HashMap<>(this.rawToBiome), this.storage.copy());
   }
 
-  private int getIndex(VirtualBiome biome) {
-    if (this.storage.getBitsPerEntry() > 8) {
-      int raw = biome.getID();
+  private int getId(VirtualBiome biome) {
+    if (this.storage.getBitsPerEntry() > BiomeStorage118.MAX_BITS_PER_ENTRY) {
+      int raw = biome.getId();
       this.rawToBiome.put(raw, biome);
       return raw;
     } else {
@@ -119,7 +110,7 @@ public class BiomeStorage118 {
       if (id == -1) {
         if (this.palette.size() >= (1 << this.storage.getBitsPerEntry())) {
           this.resize(this.storage.getBitsPerEntry() + 1);
-          return this.getIndex(biome);
+          return this.getId(biome);
         }
 
         this.palette.add(biome);
@@ -131,10 +122,9 @@ public class BiomeStorage118 {
   }
 
   private void resize(int newSize) {
-    newSize = StorageUtils.fixBitsPerEntry(this.version, newSize);
     CompactStorage newStorage = new BitStorage116(newSize, SimpleChunk.MAX_BIOMES_PER_SECTION);
     for (int i = 0; i < SimpleChunk.MAX_BIOMES_PER_SECTION; ++i) {
-      newStorage.set(i, newSize > 8 ? this.palette.get(this.storage.get(i)).getID() : this.storage.get(i));
+      newStorage.set(i, newSize > BiomeStorage118.MAX_BITS_PER_ENTRY ? this.palette.get(this.storage.get(i)).getId() : this.storage.get(i));
     }
 
     this.storage = newStorage;

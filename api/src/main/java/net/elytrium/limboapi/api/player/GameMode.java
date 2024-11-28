@@ -17,32 +17,43 @@ public enum GameMode {
   SPECTATOR;
 
   /**
-   * Cached {@link #values()} array to avoid constant array allocation.
+   * Cached {@link #values()} array to avoid constant array allocation
    */
-  private static final GameMode[] VALUES = values();
+  private static final GameMode[] VALUES = GameMode.values();
 
   /**
-   * Get the ID of this {@link GameMode}.
+   * Get the id of this {@link GameMode}
    *
-   * @return The ID.
+   * @return The id
    *
-   * @see #getByID(int)
+   * @see #getById(int)
    */
-  public short getID() {
+  public short getId() {
     return (short) this.ordinal();
   }
 
+  @Deprecated(forRemoval = true)
+  public short getID() {
+    return this.getId();
+  }
+
   /**
-   * Get a {@link GameMode} by its' ID.
+   * Get a {@link GameMode} by its' id
    *
-   * @param id The ID.
+   * @param id The id
    *
-   * @return The {@link GameMode}, or {@code null} if it does not exist.
+   * @return The {@link GameMode}, or {@code null} if it does not exist
    *
-   * @see #getID()
+   * @see #getId()
    */
   @Nullable
+  public static GameMode getById(int id) {
+    return GameMode.VALUES[id];
+  }
+
+  @Nullable
+  @Deprecated(forRemoval = true)
   public static GameMode getByID(int id) {
-    return VALUES[id];
+    return GameMode.getById(id);
   }
 }

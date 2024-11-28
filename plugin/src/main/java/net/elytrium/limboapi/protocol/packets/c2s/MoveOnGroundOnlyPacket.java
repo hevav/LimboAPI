@@ -47,11 +47,7 @@ public class MoveOnGroundOnlyPacket implements MinecraftPacket {
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
-    if (handler instanceof LimboSessionHandlerImpl) {
-      return ((LimboSessionHandlerImpl) handler).handle(this);
-    } else {
-      return true;
-    }
+    return !(handler instanceof LimboSessionHandlerImpl limbo) || limbo.handle(this);
   }
 
   @Override
@@ -64,19 +60,19 @@ public class MoveOnGroundOnlyPacket implements MinecraftPacket {
     return 1;
   }
 
-  @Override
-  public String toString() {
-    return "Player{"
-        + "onGround=" + this.onGround
-        + ", collideHorizontally=" + this.collideHorizontally
-        + "}";
-  }
-
   public boolean isOnGround() {
     return this.onGround;
   }
 
   public boolean isCollideHorizontally() {
     return this.collideHorizontally;
+  }
+
+  @Override
+  public String toString() {
+    return "MoveOnGroundOnlyPacket{"
+        + "onGround=" + this.onGround
+        + ", collideHorizontally=" + this.collideHorizontally
+        + "}";
   }
 }

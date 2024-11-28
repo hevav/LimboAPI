@@ -37,6 +37,6 @@ public class DisconnectListener {
     this.plugin.removeLoginQueue(player);
     this.plugin.removeKickCallback(player);
     this.plugin.removeNextServer(player);
-    this.plugin.removeInitialID(player);
+    LimboAPI.removeClientUniqueId(player);
   }
 }

@@ -7,7 +7,9 @@
 
 package net.elytrium.limboapi.api.chunk;
 
+import net.elytrium.limboapi.api.chunk.data.BlockSection;
 import net.elytrium.limboapi.api.chunk.data.ChunkSnapshot;
+import net.elytrium.limboapi.api.chunk.data.LightSection;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -15,12 +17,20 @@ import org.checkerframework.common.value.qual.IntRange;
 
 public interface VirtualChunk {
 
+  /**
+   * @param posX Must be within range [0,15]
+   * @param posZ Must be within range [0,15]
+   */
   void setBlock(int posX, int posY, int posZ, @Nullable VirtualBlock block);
 
   void setBlockEntity(int posX, int posY, int posZ, @Nullable CompoundBinaryTag nbt, @Nullable VirtualBlockEntity blockEntity);
 
   void setBlockEntity(VirtualBlockEntity.Entry blockEntityEntry);
 
+  /**
+   * @param posX Must be within range [0,15]
+   * @param posZ Must be within range [0,15]
+   */
   @NonNull
   VirtualBlock getBlock(int posX, int posY, int posZ);
 
@@ -47,7 +57,19 @@ public interface VirtualChunk {
 
   int getPosZ();
 
-  ChunkSnapshot getFullChunkSnapshot();
+  @Deprecated(forRemoval = true)
+  default ChunkSnapshot getFullChunkSnapshot() {
+    return this.createSnapshot(true);
+  }
 
-  ChunkSnapshot getPartialChunkSnapshot(long previousUpdate);
+  @Deprecated(forRemoval = true)
+  default ChunkSnapshot getPartialChunkSnapshot(long previousUpdate) {
+    return this.createSnapshot(false);
+  }
+
+  ChunkSnapshot createSnapshot(boolean fullChunk);
+
+  BlockSection[] createBlockSectionSnapshot();
+
+  LightSection[] createLightSnapshot();
 }

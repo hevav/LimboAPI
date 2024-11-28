@@ -61,23 +61,20 @@ public class MinecraftLimitedCompressDecoder extends MinecraftCompressDecoder im
     int claimedUncompressedSize = ProtocolUtils.readVarInt(in);
     if (claimedUncompressedSize == 0) {
       out.add(in.retain());
-    } else {
-      if (claimedUncompressedSize > Settings.IMP.MAIN.MAX_SINGLE_GENERIC_PACKET_LENGTH) {
-        ctx.close();
-      } else {
-        if (claimedUncompressedSize >= this.threshold && claimedUncompressedSize <= this.uncompressedCap) {
-          ByteBuf compatibleIn = MoreByteBufUtils.ensureCompatible(ctx.alloc(), this.compressor, in);
-          ByteBuf uncompressed = MoreByteBufUtils.preferredBuffer(ctx.alloc(), this.compressor, claimedUncompressedSize);
-          try {
-            this.compressor.inflate(compatibleIn, uncompressed, claimedUncompressedSize);
-            out.add(uncompressed);
-          } catch (Exception e) {
-            uncompressed.release();
-            throw e;
-          } finally {
-            compatibleIn.release();
-          }
-        }
+    } else if (claimedUncompressedSize > Settings.IMP.MAIN.MAX_SINGLE_GENERIC_PACKET_LENGTH) {
+      ctx.close();
+    } else if (claimedUncompressedSize >= this.threshold && claimedUncompressedSize <= this.uncompressedCap) {
+      var alloc = ctx.alloc();
+      ByteBuf compatibleIn = MoreByteBufUtils.ensureCompatible(alloc, this.compressor, in);
+      ByteBuf uncompressed = MoreByteBufUtils.preferredBuffer(alloc, this.compressor, claimedUncompressedSize);
+      try {
+        this.compressor.inflate(compatibleIn, uncompressed, claimedUncompressedSize);
+        out.add(uncompressed);
+      } catch (Exception e) {
+        uncompressed.release();
+        throw e;
+      } finally {
+        compatibleIn.release();
       }
     }
   }

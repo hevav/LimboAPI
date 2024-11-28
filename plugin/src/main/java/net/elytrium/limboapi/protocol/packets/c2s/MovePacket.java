@@ -21,7 +21,6 @@ import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
 import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
-import com.velocitypowered.proxy.protocol.ProtocolUtils.Direction;
 import io.netty.buffer.ByteBuf;
 import net.elytrium.limboapi.server.LimboSessionHandlerImpl;
 
@@ -36,16 +35,15 @@ public class MovePacket implements MinecraftPacket {
   private boolean collideHorizontally;
 
   @Override
-  public void decode(ByteBuf buf, Direction direction, ProtocolVersion protocolVersion) {
+  public void decode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
     this.posX = buf.readDouble();
-    if (protocolVersion.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0) {
-      buf.skipBytes(8);
-    }
     this.posY = buf.readDouble();
+    if (protocolVersion.noGreaterThan(ProtocolVersion.MINECRAFT_1_7_6)) {
+      buf.skipBytes(Double.BYTES); // eyes pos
+    }
     this.posZ = buf.readDouble();
     this.yaw = buf.readFloat();
     this.pitch = buf.readFloat();
-
     if (protocolVersion.lessThan(ProtocolVersion.MINECRAFT_1_21_2)) {
       this.onGround = buf.readBoolean();
     } else {
@@ -56,40 +54,23 @@ public class MovePacket implements MinecraftPacket {
   }
 
   @Override
-  public void encode(ByteBuf buf, Direction direction, ProtocolVersion protocolVersion) {
+  public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
     throw new IllegalStateException();
   }
 
   @Override
   public boolean handle(MinecraftSessionHandler handler) {
-    if (handler instanceof LimboSessionHandlerImpl) {
-      return ((LimboSessionHandlerImpl) handler).handle(this);
-    } else {
-      return true;
-    }
+    return !(handler instanceof LimboSessionHandlerImpl limbo) || limbo.handle(this);
   }
 
   @Override
   public int expectedMaxLength(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion version) {
-    return version.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0 ? 41 : 33;
+    return version.noGreaterThan(ProtocolVersion.MINECRAFT_1_7_6) ? Double.BYTES * 4 + Float.BYTES * 2 + 1 : Double.BYTES * 3 + Float.BYTES * 2 + 1;
   }
 
   @Override
   public int expectedMinLength(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion version) {
-    return 33;
-  }
-
-  @Override
-  public String toString() {
-    return "PlayerPositionAndLook{"
-        + "posX=" + this.posX
-        + ", posY=" + this.posY
-        + ", posZ=" + this.posZ
-        + ", yaw=" + this.yaw
-        + ", pitch=" + this.pitch
-        + ", onGround=" + this.onGround
-        + ", collideHorizontally=" + this.collideHorizontally
-        + "}";
+    return Double.BYTES * 3 + Float.BYTES * 2 + 1;
   }
 
   public double getX() {
@@ -118,5 +99,18 @@ public class MovePacket implements MinecraftPacket {
 
   public boolean isCollideHorizontally() {
     return this.collideHorizontally;
+  }
+
+  @Override
+  public String toString() {
+    return "MovePacket{"
+        + "posX=" + this.posX
+        + ", posY=" + this.posY
+        + ", posZ=" + this.posZ
+        + ", yaw=" + this.yaw
+        + ", pitch=" + this.pitch
+        + ", onGround=" + this.onGround
+        + ", collideHorizontally=" + this.collideHorizontally
+        + "}";
   }
 }

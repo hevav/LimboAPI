@@ -17,73 +17,20 @@
 
 package net.elytrium.limboapi.server.world.chunk;
 
-import java.util.List;
 import net.elytrium.limboapi.api.chunk.VirtualBiome;
 import net.elytrium.limboapi.api.chunk.VirtualBlock;
 import net.elytrium.limboapi.api.chunk.VirtualBlockEntity;
+import net.elytrium.limboapi.api.chunk.data.BlockSection;
 import net.elytrium.limboapi.api.chunk.data.ChunkSnapshot;
 import net.elytrium.limboapi.api.chunk.data.LightSection;
 import net.elytrium.limboapi.server.world.SimpleBlock;
 
-public class SimpleChunkSnapshot implements ChunkSnapshot {
-
-  private final int posX;
-  private final int posZ;
-  private final boolean fullChunk;
-  private final SimpleSection[] sections;
-  private final LightSection[] light;
-  private final VirtualBiome[] biomes;
-  private final List<VirtualBlockEntity.Entry> blockEntityEntries;
-
-  public SimpleChunkSnapshot(int posX, int posZ, boolean fullChunk, SimpleSection[] sections, LightSection[] light,
-                             VirtualBiome[] biomes, List<VirtualBlockEntity.Entry> blockEntityEntries) {
-    this.posX = posX;
-    this.posZ = posZ;
-    this.fullChunk = fullChunk;
-    this.sections = sections;
-    this.light = light;
-    this.biomes = biomes;
-    this.blockEntityEntries = blockEntityEntries;
-  }
+public record SimpleChunkSnapshot(int posX, int posZ, boolean fullChunk,
+    BlockSection[] sections, LightSection[] light, VirtualBiome[] biomes, VirtualBlockEntity.Entry[] blockEntityEntries) implements ChunkSnapshot {
 
   @Override
   public VirtualBlock getBlock(int posX, int posY, int posZ) {
-    SimpleSection section = this.sections[posY >> 4];
-    return section == null ? SimpleBlock.AIR : section.getBlockAt(posX, posY & 15, posZ);
-  }
-
-  @Override
-  public int getPosX() {
-    return this.posX;
-  }
-
-  @Override
-  public int getPosZ() {
-    return this.posZ;
-  }
-
-  @Override
-  public boolean isFullChunk() {
-    return this.fullChunk;
-  }
-
-  @Override
-  public SimpleSection[] getSections() {
-    return this.sections;
-  }
-
-  @Override
-  public LightSection[] getLight() {
-    return this.light;
-  }
-
-  @Override
-  public VirtualBiome[] getBiomes() {
-    return this.biomes;
-  }
-
-  @Override
-  public List<VirtualBlockEntity.Entry> getBlockEntityEntries() {
-    return this.blockEntityEntries;
+    BlockSection section = this.sections[posY >> 4];
+    return section == null ? SimpleBlock.AIR : section.getBlockAt(posX & 0x0F, posY & 0x0F, posZ & 0x0F);
   }
 }

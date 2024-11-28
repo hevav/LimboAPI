@@ -7,11 +7,12 @@
 
 package net.elytrium.limboapi.api.protocol.item;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 public interface ItemComponent<T> {
 
-  String getName();
+  void setValue(@Nullable T value);
 
-  ItemComponent<T> setValue(T value);
-
+  @Nullable
   T getValue();
 }

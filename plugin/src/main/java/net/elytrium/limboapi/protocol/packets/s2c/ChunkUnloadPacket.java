@@ -25,11 +25,6 @@ import io.netty.buffer.ByteBuf;
 
 public record ChunkUnloadPacket(int posX, int posZ) implements MinecraftPacket {
 
-  public ChunkUnloadPacket() {
-    this(0, 0);
-    throw new IllegalStateException();
-  }
-
   @Override
   public void decode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
     throw new IllegalStateException();

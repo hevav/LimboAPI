@@ -61,8 +61,6 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoop;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.EnumSet;
 import java.util.List;
@@ -71,35 +69,33 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BiConsumer;
 import net.elytrium.commons.utils.reflection.ReflectionException;
 import net.elytrium.limboapi.LimboAPI;
 import net.elytrium.limboapi.injection.login.confirmation.LoginConfirmHandler;
 import net.elytrium.limboapi.server.LimboSessionHandlerImpl;
-import net.elytrium.limboapi.utils.LambdaUtil;
+import net.elytrium.limboapi.utils.Reflection;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 
 public class LoginTasksQueue {
 
-  private static final MethodHandle PROFILE_FIELD;
+  private static final MethodHandle PROFILE_FIELD = Reflection.findSetter(ConnectedPlayer.class, "profile", GameProfile.class);
+  private static final MethodHandle SET_PERMISSION_FUNCTION_METHOD = Reflection.findVirtualVoid(ConnectedPlayer.class, "setPermissionFunction", PermissionFunction.class);
+  private static final MethodHandle INITIAL_CONNECT_SESSION_HANDLER_CONSTRUCTOR = Reflection.findConstructor(InitialConnectSessionHandler.class, ConnectedPlayer.class, VelocityServer.class);
+  private static final MethodHandle SET_CLIENT_BRAND = Reflection.findVirtualVoid(ConnectedPlayer.class, "setClientBrand", String.class);
+  private static final MethodHandle BRAND_CHANNEL_SETTER = Reflection.findSetter(ClientConfigSessionHandler.class, "brandChannel", String.class);
+  private static final MethodHandle CONNECT_TO_INITIAL_SERVER_METHOD = Reflection.findVirtual(AuthSessionHandler.class, "connectToInitialServer", CompletableFuture.class, ConnectedPlayer.class);
+
   private static final PermissionProvider DEFAULT_PERMISSIONS;
-  private static final MethodHandle SET_PERMISSION_FUNCTION_METHOD;
-  private static final MethodHandle INITIAL_CONNECT_SESSION_HANDLER_CONSTRUCTOR;
-  private static final BiConsumer<Object, MinecraftConnection> MC_CONNECTION_SETTER;
-  private static final MethodHandle CONNECT_TO_INITIAL_SERVER_METHOD;
-  private static final MethodHandle SET_CLIENT_BRAND;
-  private static final BiConsumer<ClientConfigSessionHandler, String> BRAND_CHANNEL_SETTER;
 
   private final LimboAPI plugin;
-  private final Object handler;
+  private final AuthSessionHandler handler;
   private final VelocityServer server;
   private final ConnectedPlayer player;
   private final InboundConnection inbound;
   private final Queue<Runnable> queue;
 
-  public LoginTasksQueue(LimboAPI plugin, Object handler, VelocityServer server, ConnectedPlayer player,
-                         InboundConnection inbound, Queue<Runnable> queue) {
+  public LoginTasksQueue(LimboAPI plugin, AuthSessionHandler handler, VelocityServer server, ConnectedPlayer player, InboundConnection inbound, Queue<Runnable> queue) {
     this.plugin = plugin;
     this.handler = handler;
     this.server = server;
@@ -120,6 +116,7 @@ public class LoginTasksQueue {
     }
   }
 
+  @SuppressWarnings("UnnecessaryToStringCall")
   private void finish() {
     this.plugin.removeLoginQueue(this.player);
 
@@ -128,79 +125,67 @@ public class LoginTasksQueue {
     Logger logger = LimboAPI.getLogger();
 
     this.plugin.getEventManagerHook().proceedProfile(this.player.getGameProfile());
-    eventManager.fire(new GameProfileRequestEvent(this.inbound, this.player.getGameProfile(), this.player.isOnlineMode())).thenAcceptAsync(
-        gameProfile -> {
-          try {
-            UUID uuid = this.plugin.getInitialID(this.player);
-            if (connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_19_1) <= 0) {
-              connection.delayedWrite(new LegacyPlayerListItemPacket(
-                  LegacyPlayerListItemPacket.REMOVE_PLAYER,
-                  List.of(new LegacyPlayerListItemPacket.Item(uuid))
-              ));
+    eventManager.fire(new GameProfileRequestEvent(this.inbound, this.player.getGameProfile(), this.player.isOnlineMode())).thenAcceptAsync(gameProfile -> {
+      try {
+        UUID uuid = LimboAPI.getClientUniqueId(this.player);
+        if (connection.getProtocolVersion().noGreaterThan(ProtocolVersion.MINECRAFT_1_19_1)) {
+          // TODO try to remove it
+          connection.delayedWrite(new LegacyPlayerListItemPacket(LegacyPlayerListItemPacket.REMOVE_PLAYER,
+              List.of(new LegacyPlayerListItemPacket.Item(uuid))
+          ));
+          connection.delayedWrite(new LegacyPlayerListItemPacket(LegacyPlayerListItemPacket.ADD_PLAYER,
+              List.of(new LegacyPlayerListItemPacket.Item(uuid).setName(gameProfile.getUsername()).setProperties(gameProfile.getGameProfile().getProperties()))
+          ));
+        } else if (connection.getState() != StateRegistry.CONFIG) {
+          UpsertPlayerInfoPacket.Entry playerInfoEntry = new UpsertPlayerInfoPacket.Entry(uuid);
+          playerInfoEntry.setDisplayName(new ComponentHolder(this.player.getProtocolVersion(), Component.text(gameProfile.getUsername())));
+          playerInfoEntry.setProfile(gameProfile.getGameProfile());
+          connection.delayedWrite(new UpsertPlayerInfoPacket(EnumSet.of(UpsertPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME, UpsertPlayerInfoPacket.Action.ADD_PLAYER), List.of(playerInfoEntry)));
+        }
 
-              connection.delayedWrite(new LegacyPlayerListItemPacket(
-                  LegacyPlayerListItemPacket.ADD_PLAYER,
-                  List.of(
-                      new LegacyPlayerListItemPacket.Item(uuid)
-                          .setName(gameProfile.getUsername())
-                          .setProperties(gameProfile.getGameProfile().getProperties())
-                  )
-              ));
-            } else if (connection.getState() != StateRegistry.CONFIG) {
-              UpsertPlayerInfoPacket.Entry playerInfoEntry = new UpsertPlayerInfoPacket.Entry(uuid);
-              playerInfoEntry.setDisplayName(new ComponentHolder(this.player.getProtocolVersion(), Component.text(gameProfile.getUsername())));
-              playerInfoEntry.setProfile(gameProfile.getGameProfile());
+        PROFILE_FIELD.invokeExact(this.player, gameProfile.getGameProfile());
 
-              connection.delayedWrite(new UpsertPlayerInfoPacket(
-                  EnumSet.of(
-                      UpsertPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME,
-                      UpsertPlayerInfoPacket.Action.ADD_PLAYER),
-                  List.of(playerInfoEntry)));
+        // From Velocity
+        eventManager.fire(new PermissionsSetupEvent(this.player, DEFAULT_PERMISSIONS)).thenAcceptAsync(event -> {
+          if (!connection.isClosed()) {
+            // Wait for permissions to load, then set the players' permission function
+            PermissionFunction function = event.createFunction(this.player);
+            if (function == null) {
+              logger.error(
+                  "A plugin permission provider {} provided an invalid permission function"
+                  + " for player {}. This is a bug in the plugin, not in Velocity. Falling"
+                  + " back to the default permission function.",
+                  event.getProvider().getClass().getName(),
+                  this.player.getUsername()
+              );
+            } else {
+              try {
+                SET_PERMISSION_FUNCTION_METHOD.invokeExact(this.player, function);
+              } catch (Throwable t) {
+                logger.error("Exception while completing injection to {}", this.player.toString(), t);
+              }
             }
 
-            PROFILE_FIELD.invokeExact(this.player, gameProfile.getGameProfile());
-
-            // From Velocity.
-            eventManager
-                .fire(new PermissionsSetupEvent(this.player, DEFAULT_PERMISSIONS))
-                .thenAcceptAsync(event -> {
-                  if (!connection.isClosed()) {
-                    // Wait for permissions to load, then set the players' permission function.
-                    PermissionFunction function = event.createFunction(this.player);
-                    if (function == null) {
-                      logger.error(
-                          "A plugin permission provider {} provided an invalid permission function"
-                              + " for player {}. This is a bug in the plugin, not in Velocity. Falling"
-                              + " back to the default permission function.",
-                          event.getProvider().getClass().getName(),
-                          this.player.getUsername()
-                      );
-                    } else {
-                      try {
-                        SET_PERMISSION_FUNCTION_METHOD.invokeExact(this.player, function);
-                      } catch (Throwable ex) {
-                        logger.error("Exception while completing injection to {}", this.player, ex);
-                      }
-                    }
-                    try {
-                      this.initialize(connection);
-                    } catch (Throwable e) {
-                      throw new ReflectionException(e);
-                    }
-                  }
-                }, connection.eventLoop());
-          } catch (Throwable e) {
-            logger.error("Exception while completing injection to {}", this.player, e);
+            try {
+              this.initialize(connection);
+            } catch (Throwable t) {
+              throw new ReflectionException(t);
+            }
           }
         }, connection.eventLoop());
+      } catch (Throwable t) {
+        logger.error("Exception while completing injection to {}", this.player.toString(), t);
+      }
+    }, connection.eventLoop());
   }
 
-  // From Velocity.
+  // From Velocity
+  @SuppressWarnings("UnnecessaryToStringCall")
   @SuppressFBWarnings("NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE")
-  private void initialize(MinecraftConnection connection) throws Throwable {
+  private void initialize(MinecraftConnection connection) {
     connection.setAssociation(this.player);
-    if (connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) < 0
-        || connection.getState() != StateRegistry.CONFIG) {
+    ProtocolVersion version = connection.getProtocolVersion();
+    if (version.lessThan(ProtocolVersion.MINECRAFT_1_20_2) || connection.getState() != StateRegistry.CONFIG) {
       this.plugin.setState(connection, StateRegistry.PLAY);
     }
 
@@ -208,50 +193,46 @@ public class LoginTasksQueue {
     this.plugin.deject3rdParty(pipeline);
 
     if (pipeline.get(Connections.FRAME_ENCODER) == null) {
-      this.plugin.fixCompressor(pipeline, connection.getProtocolVersion());
+      this.plugin.fixCompressor(pipeline, version);
     }
 
     Logger logger = LimboAPI.getLogger();
     this.server.getEventManager().fire(new LoginEvent(this.player)).thenAcceptAsync(event -> {
       if (connection.isClosed()) {
-        // The player was disconnected.
+        // The player was disconnected
         this.server.getEventManager().fireAndForget(new DisconnectEvent(this.player, DisconnectEvent.LoginStatus.CANCELLED_BY_USER_BEFORE_COMPLETE));
       } else {
         Optional<Component> reason = event.getResult().getReasonComponent();
         if (reason.isPresent()) {
           this.player.disconnect0(reason.get(), false);
-        } else {
-          if (this.server.registerConnection(this.player)) {
-            if (connection.getActiveSessionHandler() instanceof LoginConfirmHandler confirm) {
-              confirm.waitForConfirmation(() -> this.connectToServer(logger, this.player, connection));
-            } else {
-              this.connectToServer(logger, this.player, connection);
-            }
+        } else if (this.server.registerConnection(this.player)) {
+          if (connection.getActiveSessionHandler() instanceof LoginConfirmHandler confirm) {
+            confirm.waitForConfirmation(() -> this.connectToServer(connection));
           } else {
-            this.player.disconnect0(Component.translatable("velocity.error.already-connected-proxy"), false);
+            this.connectToServer(connection);
           }
+        } else {
+          this.player.disconnect0(Component.translatable("velocity.error.already-connected-proxy"), false);
         }
       }
     }, connection.eventLoop()).exceptionally(t -> {
-      logger.error("Exception while completing login initialisation phase for {}", this.player, t);
+      logger.error("Exception while completing login initialisation phase for {}", this.player.toString(), t);
       return null;
     });
   }
 
+  @SuppressWarnings({"DataFlowIssue", "unchecked", "UnnecessaryToStringCall"})
   @SuppressFBWarnings("NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE")
-  private void connectToServer(Logger logger, ConnectedPlayer player, MinecraftConnection connection) {
-    if (connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) < 0) {
+  private void connectToServer(MinecraftConnection connection) {
+    if (connection.getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
       try {
-        connection.setActiveSessionHandler(connection.getState(),
-            (InitialConnectSessionHandler) INITIAL_CONNECT_SESSION_HANDLER_CONSTRUCTOR.invokeExact(this.player, this.server));
-      } catch (Throwable e) {
-        throw new ReflectionException(e);
+        connection.setActiveSessionHandler(connection.getState(), (InitialConnectSessionHandler) INITIAL_CONNECT_SESSION_HANDLER_CONSTRUCTOR.invokeExact(this.player, this.server));
+      } catch (Throwable t) {
+        throw new ReflectionException(t);
       }
     } else if (connection.getState() == StateRegistry.PLAY) {
       // Synchronize with the client to ensure that it will not corrupt CONFIG state with PLAY packets
-      ((LimboSessionHandlerImpl) connection.getActiveSessionHandler())
-          .disconnectToConfig(() -> this.connectToServer(logger, player, connection));
-
+      ((LimboSessionHandlerImpl) connection.getActiveSessionHandler()).disconnectToConfig(() -> this.connectToServer(connection));
       return; // Re-running this method due to synchronization with the client
     } else {
       ClientConfigSessionHandler configHandler = new ClientConfigSessionHandler(this.server, this.player);
@@ -268,9 +249,9 @@ public class LoginTasksQueue {
           try {
             this.server.getEventManager().fireAndForget(new PlayerClientBrandEvent(this.player, sessionHandler.getBrand()));
             SET_CLIENT_BRAND.invokeExact(this.player, sessionHandler.getBrand());
-            BRAND_CHANNEL_SETTER.accept(configHandler, "minecraft:brand");
-          } catch (Throwable e) {
-            throw new ReflectionException(e);
+            BRAND_CHANNEL_SETTER.invokeExact(configHandler, "minecraft:brand");
+          } catch (Throwable t) {
+            throw new ReflectionException(t);
           }
         }
       }
@@ -278,47 +259,26 @@ public class LoginTasksQueue {
       this.plugin.setActiveSessionHandler(connection, StateRegistry.CONFIG, configHandler);
     }
 
-    this.server.getEventManager().fire(new PostLoginEvent(this.player)).thenAccept(postLoginEvent -> {
+    this.server.getEventManager().fire(new PostLoginEvent(this.player)).thenCompose(postLoginEvent -> {
       try {
-        MC_CONNECTION_SETTER.accept(this.handler, connection);
-        CONNECT_TO_INITIAL_SERVER_METHOD.invoke((AuthSessionHandler) this.handler, this.player);
-      } catch (Throwable e) {
-        throw new ReflectionException(e);
+        LoginListener.MC_CONNECTION_SETTER.invokeExact(this.handler, connection);
+        return (CompletableFuture<Void>) CONNECT_TO_INITIAL_SERVER_METHOD.invokeExact(this.handler, this.player);
+      } catch (Throwable t) {
+        throw new ReflectionException(t);
       }
+    }).exceptionally(t -> {
+      LimboAPI.getLogger().error("Exception while connecting {} to initial server", this.player.toString(), t);
+      return null;
     });
   }
 
   static {
     try {
-      PROFILE_FIELD = MethodHandles.privateLookupIn(ConnectedPlayer.class, MethodHandles.lookup())
-          .findSetter(ConnectedPlayer.class, "profile", GameProfile.class);
-
       Field defaultPermissionsField = ConnectedPlayer.class.getDeclaredField("DEFAULT_PERMISSIONS");
       defaultPermissionsField.setAccessible(true);
       DEFAULT_PERMISSIONS = (PermissionProvider) defaultPermissionsField.get(null);
-
-      SET_PERMISSION_FUNCTION_METHOD = MethodHandles.privateLookupIn(ConnectedPlayer.class, MethodHandles.lookup())
-          .findVirtual(ConnectedPlayer.class, "setPermissionFunction", MethodType.methodType(void.class, PermissionFunction.class));
-
-      INITIAL_CONNECT_SESSION_HANDLER_CONSTRUCTOR = MethodHandles
-          .privateLookupIn(InitialConnectSessionHandler.class, MethodHandles.lookup())
-          .findConstructor(InitialConnectSessionHandler.class, MethodType.methodType(void.class, ConnectedPlayer.class, VelocityServer.class));
-
-      CONNECT_TO_INITIAL_SERVER_METHOD = MethodHandles.privateLookupIn(AuthSessionHandler.class, MethodHandles.lookup())
-          .findVirtual(AuthSessionHandler.class, "connectToInitialServer", MethodType.methodType(CompletableFuture.class, ConnectedPlayer.class));
-
-      Field mcConnectionField = AuthSessionHandler.class.getDeclaredField("mcConnection");
-      mcConnectionField.setAccessible(true);
-      MC_CONNECTION_SETTER = LambdaUtil.setterOf(mcConnectionField);
-
-      SET_CLIENT_BRAND = MethodHandles.privateLookupIn(ConnectedPlayer.class, MethodHandles.lookup())
-          .findVirtual(ConnectedPlayer.class, "setClientBrand", MethodType.methodType(void.class, String.class));
-
-      Field brandChannelField = ClientConfigSessionHandler.class.getDeclaredField("brandChannel");
-      brandChannelField.setAccessible(true);
-      BRAND_CHANNEL_SETTER = LambdaUtil.setterOf(brandChannelField);
-    } catch (Throwable e) {
-      throw new ReflectionException(e);
+    } catch (NoSuchFieldException | IllegalAccessException t) {
+      throw new ReflectionException(t);
     }
   }
 }

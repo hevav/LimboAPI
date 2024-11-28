@@ -1,7 +1,0 @@
-{
-  "minecraft:empty": "0",
-  "minecraft:flowing_water": "1",
-  "minecraft:water": "2",
-  "minecraft:flowing_lava": "3",
-  "minecraft:lava": "4"
-}

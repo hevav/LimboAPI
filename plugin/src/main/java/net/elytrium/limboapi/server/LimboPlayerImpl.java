@@ -29,6 +29,7 @@ import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
@@ -41,17 +42,20 @@ import net.elytrium.limboapi.api.player.GameMode;
 import net.elytrium.limboapi.api.player.LimboPlayer;
 import net.elytrium.limboapi.api.protocol.item.ItemComponentMap;
 import net.elytrium.limboapi.api.protocol.packets.data.AbilityFlags;
+import net.elytrium.limboapi.api.protocol.packets.data.EntityDataValue;
 import net.elytrium.limboapi.api.protocol.packets.data.MapData;
 import net.elytrium.limboapi.api.protocol.packets.data.MapPalette;
-import net.elytrium.limboapi.protocol.packets.s2c.ChangeGameStatePacket;
+import net.elytrium.limboapi.protocol.packets.s2c.GameEventPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.MapDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.PlayerAbilitiesPacket;
-import net.elytrium.limboapi.protocol.packets.s2c.PositionRotationPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.PlayerPositionPacket;
+import net.elytrium.limboapi.protocol.packets.s2c.SetEntityDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.SetSlotPacket;
-import net.elytrium.limboapi.protocol.packets.s2c.TimeUpdatePacket;
+import net.elytrium.limboapi.protocol.packets.s2c.SetTimePacket;
 import net.elytrium.limboapi.server.world.SimpleItem;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.kyori.adventure.nbt.IntBinaryTag;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class LimboPlayerImpl implements LimboPlayer {
 
@@ -60,7 +64,6 @@ public class LimboPlayerImpl implements LimboPlayer {
   private final ConnectedPlayer player;
   private final MinecraftConnection connection;
   private final LimboSessionHandlerImpl sessionHandler;
-  private final ProtocolVersion version;
 
   private GameMode gameMode = GameMode.ADVENTURE;
 
@@ -71,17 +74,16 @@ public class LimboPlayerImpl implements LimboPlayer {
 
     this.connection = this.player.getConnection();
     this.sessionHandler = (LimboSessionHandlerImpl) this.connection.getActiveSessionHandler();
-    this.version = this.player.getProtocolVersion();
   }
 
   @Override
-  public void writePacket(Object packetObj) {
-    this.connection.delayedWrite(packetObj);
+  public void writePacket(Object msg) {
+    this.connection.delayedWrite(msg);
   }
 
   @Override
-  public void writePacketAndFlush(Object packetObj) {
-    this.connection.write(packetObj);
+  public void writePacketAndFlush(Object msg) {
+    this.connection.write(msg);
   }
 
   @Override
@@ -90,8 +92,8 @@ public class LimboPlayerImpl implements LimboPlayer {
   }
 
   @Override
-  public void closeWith(Object packetObj) {
-    this.connection.closeWith(packetObj);
+  public void closeWith(Object msg) {
+    this.connection.closeWith(msg);
   }
 
   @Override
@@ -100,36 +102,17 @@ public class LimboPlayerImpl implements LimboPlayer {
   }
 
   @Override
-  public void sendImage(BufferedImage image) {
-    this.sendImage(0, image, true, true);
-  }
-
-  @Override
-  public void sendImage(BufferedImage image, boolean sendItem) {
-    this.sendImage(0, image, sendItem, true);
-  }
-
-  @Override
-  public void sendImage(int mapID, BufferedImage image) {
-    this.sendImage(mapID, image, true, true);
-  }
-
-  @Override
-  public void sendImage(int mapID, BufferedImage image, boolean sendItem) {
-    this.sendImage(mapID, image, sendItem, true);
-  }
-
-  @Override
-  public void sendImage(int mapID, BufferedImage image, boolean sendItem, boolean resize) {
+  public void sendImage(int mapId, BufferedImage image, boolean sendItem, int itemSlot, boolean resize) {
+    ProtocolVersion version = this.player.getProtocolVersion();
     if (sendItem) {
-      this.setInventory(
-          36,
+      // TODO check 1.16.5 and 1.20.6
+      this.setItem(
+          itemSlot,
           SimpleItem.fromItem(Item.FILLED_MAP),
           1,
-          mapID,
-          this.version.compareTo(ProtocolVersion.MINECRAFT_1_17) < 0
-              ? null
-              : CompoundBinaryTag.builder().put("map", IntBinaryTag.intBinaryTag(mapID)).build()
+          (short) mapId,
+          version.noGreaterThan(ProtocolVersion.MINECRAFT_1_16_4) ? null : CompoundBinaryTag.builder().put("map", IntBinaryTag.intBinaryTag(mapId)).build(),
+          null
       );
     }
 
@@ -144,21 +127,20 @@ public class LimboPlayerImpl implements LimboPlayer {
         image = resizedImage;
       } else {
         throw new IllegalStateException(
-            "You either need to provide an image of " + MapData.MAP_DIM_SIZE + "x" + MapData.MAP_DIM_SIZE
-                + " pixels or set the resize parameter to true so that API will automatically resize your image."
+            "You either need to provide an image of " + MapData.MAP_DIM_SIZE + "x" + MapData.MAP_DIM_SIZE + " pixels or set the resize parameter to true so that API will automatically resize your image"
         );
       }
     }
 
-    int[] toWrite = MapPalette.imageToBytes(image, this.version);
-    if (this.version.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0) {
+    int[] toWrite = MapPalette.imageToBytes(image, version);
+    if (version.noGreaterThan(ProtocolVersion.MINECRAFT_1_7_6)) {
       byte[][] canvas = new byte[MapData.MAP_DIM_SIZE][MapData.MAP_DIM_SIZE];
       for (int i = 0; i < MapData.MAP_SIZE; ++i) {
-        canvas[i & 127][i >> 7] = (byte) toWrite[i];
+        canvas[i & 0x7F][i >> 7] = (byte) toWrite[i];
       }
 
       for (int i = 0; i < MapData.MAP_DIM_SIZE; ++i) {
-        this.writePacket(new MapDataPacket(mapID, (byte) 0, new MapData(i, canvas[i])));
+        this.writePacket(new MapDataPacket(mapId, (byte) 0, new MapData(i, canvas[i])));
       }
 
       this.flushPackets();
@@ -168,74 +150,96 @@ public class LimboPlayerImpl implements LimboPlayer {
         canvas[i] = (byte) toWrite[i];
       }
 
-      this.writePacketAndFlush(new MapDataPacket(mapID, (byte) 0, new MapData(canvas)));
+      this.writePacketAndFlush(new MapDataPacket(mapId, (byte) 0, new MapData(canvas)));
     }
   }
 
   @Override
-  public void setInventory(VirtualItem item, int count) {
-    this.writePacketAndFlush(new SetSlotPacket(0, 36, item, count, 0, null, null));
+  public void setItemInMainHand(VirtualItem item, int count) {
+    this.writePacketAndFlush(new SetSlotPacket(0, 36, item, count));
   }
 
   @Override
-  public void setInventory(VirtualItem item, int slot, int count) {
-    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, 0, null, null));
+  public void setItemInOffHand(VirtualItem item, int count) {
+    this.writePacketAndFlush(new SetSlotPacket(0, 45, item, count));
   }
 
   @Override
-  public void setInventory(int slot, VirtualItem item, int count, int data, CompoundBinaryTag nbt) {
-    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, data, nbt, null));
+  public void setItem(int slot, VirtualItem item, int count) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count));
   }
 
   @Override
-  public void setInventory(int slot, VirtualItem item, int count, int data, ItemComponentMap map) {
-    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, data, null, map));
+  public void setItem(int slot, VirtualItem item, int count, CompoundBinaryTag nbt) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, nbt));
+  }
+
+  @Override
+  public void setItem(int slot, VirtualItem item, int count, ItemComponentMap map) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, map));
+  }
+
+  @Override
+  public void setItem(int slot, VirtualItem item, int count, short data) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, data));
+  }
+
+  @Override
+  public void setItem(int slot, VirtualItem item, int count, short data, @Nullable CompoundBinaryTag nbt) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, data, nbt));
+  }
+
+  @Override
+  public void setItem(int slot, VirtualItem item, int count, short data, @Nullable ItemComponentMap map) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, data, map));
+  }
+
+  @Override
+  public void setItem(int slot, VirtualItem item, int count, short data, CompoundBinaryTag nbt, ItemComponentMap map) {
+    this.writePacketAndFlush(new SetSlotPacket(0, slot, item, count, data, nbt, map));
   }
 
   @Override
   public void setGameMode(GameMode gameMode) {
-    boolean is17 = this.version.compareTo(ProtocolVersion.MINECRAFT_1_8) < 0;
-    if (gameMode != GameMode.SPECTATOR || !is17) { // Spectator game mode was added in 1.8.
+    ProtocolVersion version = this.player.getProtocolVersion();
+    boolean is17 = version.noGreaterThan(ProtocolVersion.MINECRAFT_1_7_6);
+    if (gameMode != GameMode.SPECTATOR || !is17) { // Spectator game mode was added in 1.8
       this.gameMode = gameMode;
-
-      int id = this.gameMode.getID();
-      this.sendAbilities();
+      int id = gameMode.getId();
+      this.sendGameModeSpecificAbilities();
       if (!is17) {
-        UUID uuid = this.plugin.getInitialID(this.player);
-        if (this.connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_19_1) <= 0) {
-          this.writePacket(
-              new LegacyPlayerListItemPacket(LegacyPlayerListItemPacket.UPDATE_GAMEMODE,
-                  List.of(
-                      new LegacyPlayerListItemPacket.Item(uuid).setGameMode(id)
-                  )
-              )
-          );
+        UUID uuid = LimboAPI.getClientUniqueId(this.player);
+        if (version.noGreaterThan(ProtocolVersion.MINECRAFT_1_19_1)) {
+          this.writePacket(new LegacyPlayerListItemPacket(LegacyPlayerListItemPacket.UPDATE_GAMEMODE, List.of(new LegacyPlayerListItemPacket.Item(uuid).setGameMode(id))));
         } else {
           UpsertPlayerInfoPacket.Entry playerInfoEntry = new UpsertPlayerInfoPacket.Entry(uuid);
           playerInfoEntry.setGameMode(id);
-
           this.writePacket(new UpsertPlayerInfoPacket(EnumSet.of(UpsertPlayerInfoPacket.Action.UPDATE_GAME_MODE), List.of(playerInfoEntry)));
         }
       }
-      this.writePacket(new ChangeGameStatePacket(3, id));
-
+      this.writePacket(new GameEventPacket(3, id)); // CHANGE_GAME_MODE
       this.flushPackets();
     }
   }
 
   @Override
+  public void setWorldTime(long ticks) {
+    this.writePacketAndFlush(new SetTimePacket(ticks, ticks));
+  }
+
+  @Override
   public void teleport(double posX, double posY, double posZ, float yaw, float pitch) {
-    this.writePacketAndFlush(new PositionRotationPacket(posX, posY, posZ, yaw, pitch, false, 44, true));
+    this.writePacketAndFlush(new PlayerPositionPacket(posX, posY, posZ, yaw, pitch, false, 44, true));
   }
 
   @Override
   public void disableFalling() {
-    this.writePacketAndFlush(new PlayerAbilitiesPacket((byte) (this.getAbilities() | AbilityFlags.FLYING | AbilityFlags.ALLOW_FLYING), 0F, 0F));
+    this.writePacketAndFlush(new PlayerAbilitiesPacket((byte) (this.getGameModeSpecificAbilities() | AbilityFlags.FLYING | AbilityFlags.ALLOW_FLYING), 0F, 0F));
   }
 
   @Override
   public void enableFalling() {
-    this.writePacketAndFlush(new PlayerAbilitiesPacket((byte) (this.getAbilities() & (~AbilityFlags.FLYING)), 0.05F, 0.1F));
+    this.writePacketAndFlush(new PlayerAbilitiesPacket((byte) (this.getGameModeSpecificAbilities() & (~AbilityFlags.FLYING)), 0.05F, 0.1F));
   }
 
   @Override
@@ -244,7 +248,7 @@ public class LimboPlayerImpl implements LimboPlayer {
       if (this.connection.getActiveSessionHandler() == this.sessionHandler) {
         this.sessionHandler.disconnect(() -> {
           if (this.plugin.hasLoginQueue(this.player)) {
-            if (this.connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) >= 0) {
+            if (this.player.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
               this.sessionHandler.disconnectToConfig(() -> this.plugin.getLoginQueue(this.player).next());
             } else {
               this.sessionHandler.disconnected();
@@ -269,7 +273,7 @@ public class LimboPlayerImpl implements LimboPlayer {
       if (this.connection.getActiveSessionHandler() == this.sessionHandler) {
         this.sessionHandler.disconnect(() -> {
           if (this.plugin.hasLoginQueue(this.player)) {
-            if (this.connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) >= 0) {
+            if (this.player.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
               this.sessionHandler.disconnectToConfig(() -> {
                 this.plugin.setNextServer(this.player, server);
                 this.plugin.getLoginQueue(this.player).next();
@@ -288,26 +292,27 @@ public class LimboPlayerImpl implements LimboPlayer {
   }
 
   private void deject() {
-    this.plugin.deject3rdParty(this.connection.getChannel().pipeline());
-    this.plugin.fixCompressor(this.connection.getChannel().pipeline(), this.version);
+    var pipeline = this.connection.getChannel().pipeline();
+    this.plugin.deject3rdParty(pipeline);
+    this.plugin.fixCompressor(pipeline, this.player.getProtocolVersion());
   }
 
   private void sendToRegisteredServer(RegisteredServer server) {
     this.deject();
     this.connection.setState(StateRegistry.PLAY);
 
-    if (this.connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) >= 0) {
+    ProtocolVersion version = this.player.getProtocolVersion();
+    if (version.noLessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
       this.sessionHandler.disconnectToConfig(() -> {
         // Rollback original CONFIG handler
-        this.connection.setActiveSessionHandler(StateRegistry.CONFIG,
-            new ClientConfigSessionHandler(this.plugin.getServer(), this.player));
+        this.connection.setActiveSessionHandler(StateRegistry.CONFIG, new ClientConfigSessionHandler(this.plugin.getServer(), this.player));
         this.player.createConnectionRequest(server).fireAndForget();
       });
     } else {
-      if (this.connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_19_1) <= 0) {
+      if (version.noGreaterThan(ProtocolVersion.MINECRAFT_1_19_1)) {
         this.connection.delayedWrite(new LegacyPlayerListItemPacket(
             LegacyPlayerListItemPacket.REMOVE_PLAYER,
-            List.of(new LegacyPlayerListItemPacket.Item(this.plugin.getInitialID(this.player)))
+            List.of(new LegacyPlayerListItemPacket.Item(LimboAPI.getClientUniqueId(this.player)))
         ));
       }
 
@@ -317,22 +322,27 @@ public class LimboPlayerImpl implements LimboPlayer {
   }
 
   @Override
-  public void sendAbilities() {
-    this.writePacketAndFlush(new PlayerAbilitiesPacket(this.getAbilities(), 0.05F, 0.1F));
+  public void setEntityData(int id, Collection<EntityDataValue<?>> packedItems) {
+    this.writePacketAndFlush(new SetEntityDataPacket(id, packedItems));
   }
 
   @Override
-  public void sendAbilities(int abilities, float flySpeed, float walkSpeed) {
-    this.writePacketAndFlush(new PlayerAbilitiesPacket((byte) abilities, flySpeed, walkSpeed));
+  public void sendGameModeSpecificAbilities() {
+    this.writePacketAndFlush(new PlayerAbilitiesPacket(this.getGameModeSpecificAbilities(), 0.05F, 0.1F));
   }
 
   @Override
-  public void sendAbilities(byte abilities, float flySpeed, float walkSpeed) {
-    this.writePacketAndFlush(new PlayerAbilitiesPacket(abilities, flySpeed, walkSpeed));
+  public void sendAbilities(int abilities, float flyingSpeed, float walkingSpeed) {
+    this.writePacketAndFlush(new PlayerAbilitiesPacket((byte) abilities, flyingSpeed, walkingSpeed));
   }
 
   @Override
-  public byte getAbilities() {
+  public void sendAbilities(byte abilities, float flyingSpeed, float walkingSpeed) {
+    this.writePacketAndFlush(new PlayerAbilitiesPacket(abilities, flyingSpeed, walkingSpeed));
+  }
+
+  @Override
+  public byte getGameModeSpecificAbilities() {
     return switch (this.gameMode) {
       case CREATIVE -> AbilityFlags.ALLOW_FLYING | AbilityFlags.CREATIVE_MODE | AbilityFlags.INVULNERABLE;
       case SPECTATOR -> AbilityFlags.ALLOW_FLYING | AbilityFlags.INVULNERABLE | AbilityFlags.FLYING;
@@ -358,15 +368,6 @@ public class LimboPlayerImpl implements LimboPlayer {
   @Override
   public int getPing() {
     LimboSessionHandlerImpl handler = (LimboSessionHandlerImpl) this.connection.getActiveSessionHandler();
-    if (handler != null) {
-      return handler.getPing();
-    } else {
-      return -1;
-    }
-  }
-
-  @Override
-  public void setWorldTime(long ticks) {
-    this.writePacketAndFlush(new TimeUpdatePacket(ticks, ticks));
+    return handler == null ? -1 : handler.getPing();
   }
 }

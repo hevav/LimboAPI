@@ -51,7 +51,7 @@ public class NibbleArray3D {
   public int get(int posX, int posY, int posZ) {
     int key = BlockStorage.index(posX, posY, posZ);
     int index = key >> 1;
-    return (key & 1) == 0 ? this.data[index] & 15 : this.data[index] >> 4 & 15;
+    return (key & 1) == 0 ? this.data[index] & 0x0F : this.data[index] >> 4 & 0x0F;
   }
 
   public void set(int posX, int posY, int posZ, int value) {
@@ -60,11 +60,7 @@ public class NibbleArray3D {
 
   public void set(int key, int val) {
     int index = key >> 1;
-    if ((key & 1) == 0) {
-      this.data[index] = (byte) (this.data[index] & 240 | val & 15);
-    } else {
-      this.data[index] = (byte) (this.data[index] & 15 | (val & 15) << 4);
-    }
+    this.data[index] = (byte) ((key & 1) == 0 ? this.data[index] & 0xF0 | val & 0x0F : this.data[index] & 0x0F | (val & 0x0F) << 4);
   }
 
   public void fill(int value) {

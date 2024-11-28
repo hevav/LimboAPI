@@ -62,18 +62,17 @@ public class SimpleWorld implements VirtualWorld {
     this.yaw = yaw;
     this.pitch = pitch;
 
+    //this.getChunkOrNew((int) Math.floor(posX), (int) Math.floor(posZ));
+  }
 
-    this.getChunkOrNew((int) posX, (int) posZ);
+  @Override
+  public void setBlockEntity(int posX, int posY, int posZ, @Nullable CompoundBinaryTag nbt, @Nullable VirtualBlockEntity blockEntity) {
+    this.getChunkOrNew(posX, posZ).setBlockEntity(posX, posY, posZ, nbt, blockEntity);
   }
 
   @Override
   public void setBlock(int posX, int posY, int posZ, @Nullable VirtualBlock block) {
     this.getChunkOrNew(posX, posZ).setBlock(getChunkCoordinate(posX), posY, getChunkCoordinate(posZ), block);
-  }
-
-  @Override
-  public void setBlockEntity(int posX, int posY, int posZ, @Nullable CompoundBinaryTag nbt, @Nullable VirtualBlockEntity blockEntity) {
-    this.getChunkOrNew(posX, posZ).setBlockEntity(getChunkCoordinate(posX), posY, getChunkCoordinate(posZ), nbt, blockEntity);
   }
 
   @NonNull
@@ -150,8 +149,8 @@ public class SimpleWorld implements VirtualWorld {
     posX = getChunkXZ(posX);
     posZ = getChunkXZ(posZ);
 
-    // Modern Sodium versions don't load chunks if their "neighbours" are unloaded.
-    // We are fixing this problem there by generating all the "neighbours".
+    // Modern Sodium versions don't load chunks if their "neighbors" are unloaded
+    // We are fixing this problem there by generating all the "neighbors"
     for (int chunkX = posX - 1; chunkX <= posX + 1; ++chunkX) {
       for (int chunkZ = posZ - 1; chunkZ <= posZ + 1; ++chunkZ) {
         this.localCreateChunk(chunkX, chunkZ);
@@ -169,7 +168,7 @@ public class SimpleWorld implements VirtualWorld {
       this.chunks.put(index, chunk);
 
       int distance = this.getDistanceToSpawn(chunk);
-      for (int i = this.distanceChunkMap.size(); i <= distance; i++) {
+      for (int i = this.distanceChunkMap.size(); i <= distance; ++i) {
         this.distanceChunkMap.add(new LinkedList<>());
       }
 
@@ -210,11 +209,7 @@ public class SimpleWorld implements VirtualWorld {
 
   private <T> T chunkAction(int posX, int posZ, Function<SimpleChunk, T> function, Supplier<T> ifNull) {
     SimpleChunk chunk = this.getChunk(posX, posZ);
-    if (chunk == null) {
-      return ifNull.get();
-    }
-
-    return function.apply(chunk);
+    return chunk == null ? ifNull.get() : function.apply(chunk);
   }
 
   private static long getChunkIndex(int posX, int posZ) {
@@ -226,6 +221,6 @@ public class SimpleWorld implements VirtualWorld {
   }
 
   private static int getChunkCoordinate(int pos) {
-    return pos & 15;
+    return pos & 0x0F;
   }
 }
