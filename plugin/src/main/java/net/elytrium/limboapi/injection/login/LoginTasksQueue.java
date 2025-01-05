@@ -89,7 +89,7 @@ public class LoginTasksQueue {
   private static final BiConsumer<Object, MinecraftConnection> MC_CONNECTION_SETTER;
   private static final MethodHandle CONNECT_TO_INITIAL_SERVER_METHOD;
   private static final MethodHandle SET_CLIENT_BRAND;
-  private static final BiConsumer<ClientConfigSessionHandler, String> BRAND_CHANNEL_SETTER;
+  public static final BiConsumer<ClientConfigSessionHandler, String> BRAND_CHANNEL_SETTER;
 
   private final LimboAPI plugin;
   private final Object handler;

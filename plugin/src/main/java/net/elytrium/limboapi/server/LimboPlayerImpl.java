@@ -43,6 +43,7 @@ import net.elytrium.limboapi.api.protocol.item.ItemComponentMap;
 import net.elytrium.limboapi.api.protocol.packets.data.AbilityFlags;
 import net.elytrium.limboapi.api.protocol.packets.data.MapData;
 import net.elytrium.limboapi.api.protocol.packets.data.MapPalette;
+import net.elytrium.limboapi.injection.login.LoginTasksQueue;
 import net.elytrium.limboapi.protocol.packets.s2c.ChangeGameStatePacket;
 import net.elytrium.limboapi.protocol.packets.s2c.MapDataPacket;
 import net.elytrium.limboapi.protocol.packets.s2c.PlayerAbilitiesPacket;
@@ -299,8 +300,9 @@ public class LimboPlayerImpl implements LimboPlayer {
     if (this.connection.getProtocolVersion().compareTo(ProtocolVersion.MINECRAFT_1_20_2) >= 0) {
       this.sessionHandler.disconnectToConfig(() -> {
         // Rollback original CONFIG handler
-        this.connection.setActiveSessionHandler(StateRegistry.CONFIG,
-            new ClientConfigSessionHandler(this.plugin.getServer(), this.player));
+        ClientConfigSessionHandler handler = new ClientConfigSessionHandler(this.plugin.getServer(), this.player);
+        LoginTasksQueue.BRAND_CHANNEL_SETTER.accept(handler, "minecraft:brand");
+        this.connection.setActiveSessionHandler(StateRegistry.CONFIG, handler);
         this.player.createConnectionRequest(server).fireAndForget();
       });
     } else {
