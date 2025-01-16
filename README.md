@@ -88,7 +88,7 @@ Test server: [``ely.su``](https://hotmc.ru/minecraft-server-203216)
 
 Your donations are really appreciated. Donations wallets/links/cards:
 
-- MasterCard Debit Card (Tinkoff Bank): ``5536 9140 0599 1975``
-- Qiwi Wallet: ``PFORG`` or [this link](https://my.qiwi.com/form/Petr-YSpyiLt9c6)
+- MasterCard Debit Card (TBank): ``5536 9140 0599 1975``
+- Qiwi Wallet: ``licence revoked use tbank``
 - YooMoney Wallet: ``4100 1721 8467 044`` or [this link](https://yoomoney.ru/quickpay/shop-widget?writer=seller&targets=Donation&targets-hint=&default-sum=&button-text=11&payment-type-choice=on&mobile-payment-type-choice=on&hint=&successURL=&quickpay=shop&account=410017218467044)
 - Monero (XMR): 86VQyCz68ApebfFgrzRFAuYLdvd3qG8iT9RHcru9moQkJR9W2Q89Gt3ecFQcFu6wncGwGJsMS9E8Bfr9brztBNbX7Q2rfYS
